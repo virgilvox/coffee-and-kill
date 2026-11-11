@@ -711,7 +711,15 @@ static void stage_view(float t, bool still, v3 *w, v3 *g) {
   float lift, amax; bool one; stage_camera_rules(&lift, &amax, &one);
   float a = 0.85f + 0.08f * sinf(t * 0.2f), d = fminf(8.5f, amax + 0.4f);
   /* live, the ring sits a little under the middle, above the screen's card and strip; a still
-   * looks level, at the room around the ring */
+   * looks level, at the room around the ring. The workshop's live view is square on instead, as
+   * the fighter select's is: from the side, its COFFEE & KILL sign ran on from the screen's head,
+   * and from above, the robot arms stand in the way. Square on, the sign sits under the head and
+   * both fighters stand whole above the card. */
+  if (!still && STAGES[stage_current() >= 0 ? stage_current() : 0].kind == STK_WORKSHOP) {
+    float sw = sinf(t * 0.3f) * 0.15f;
+    *w = (v3){sw, 1.6f, 9}; *g = (v3){sw * 0.5f, 0.85f, 0};
+    return;
+  }
   *g = (v3){0, still ? 1.45f : 0.55f, 0};
   *w = (v3){sinf(a) * d, (still ? 2.35f : 3.1f) + lift, cosf(a) * d};
 }
