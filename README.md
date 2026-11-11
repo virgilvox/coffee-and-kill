@@ -81,14 +81,14 @@ Keys in these tables go over the wire and into saves: do not rename them.
 
 ## Modes
 
-- **1 PLAYER, 2 PLAYERS:** the fighter select is a grid of the 13 fighters' portraits and RANDOM, with the two picks standing large at the sides. Each side has its own cursor, tab and panel, and picks in steps: the fighter, the weapon (the fighter's own to start), then READY; in one player mode P1 then picks the CPU's fighter, weapon and level. B steps back, holding B (or Escape) leaves, Y swaps the sides, LB and RB change the colour, Start takes what each side shows. A mirror match puts the later picker in the next colour. A body loads only once the cursor rests on a fighter for a quarter second, or on a confirm. Then the stage select: a strip of every stage's still and RANDOM. A KEYHOLDER stage that is not loaded yet shows its still; its world loads the first time one of its stages is picked, behind a card with both fighters, and stays loaded after that.
+- **1 PLAYER, 2 PLAYERS:** the fighter select is a grid of the 13 fighters' portraits and RANDOM, with the two picks standing large at the sides. Each side has its own cursor, tab and panel, and picks in steps: the fighter, the weapon (the fighter's own to start), then READY; in one player mode P1 then picks the CPU's fighter, weapon and level. B steps back, holding B (or Escape) leaves, Y swaps the sides, LB and RB change the colour, Start takes what each side shows, and a CPU nobody has picked for yet fights as RANDOM. A mirror match puts the later picker in the next colour. A body loads only once the cursor rests on a fighter for a quarter second, or on a confirm. Then the stage select: a strip of every stage's still and RANDOM, the workshop seen square on behind it. A KEYHOLDER stage that is not loaded yet shows its still; its world loads the first time one of its stages is picked, behind a card with both fighters, and stays loaded after that.
 - **TOURNEY:** 4 or 8 entrants. Each one has a fighter, a weapon, and someone to play it: PLAYER, or the CPU at one of three levels.
   - Pick one stage for every match, or a new one each match.
   - It is single elimination, best of three, with sudden death on a tied match.
   - Between matches, the bracket shows results and the next match. CPU-only matches can be watched or skipped. After the final, the champion celebrates.
   - On the setup, A on an entrant opens the fighter grid, left and right change its weapon, Y who plays.
   - People take turns on the controls: two people split them (pad 1 or WASD on the left, pad 2 or the arrows on the right), and one person against the CPU plays on any pad. The bracket and the round intro say who takes which.
-  - QUIT on the bracket asks again; the pause card in a tourney match goes back to the bracket.
+  - QUIT on the bracket asks again, and so does B (Escape): a second press leaves. The pause card in a tourney match goes back to the bracket and leaves the match unplayed.
 - **Online:** the lobby is the page's. Carts add an `x` map (wire version 2: fighter, weapon, stage) to presence, challenges and answers, and the web page ignores it.
   - Two carts fight with their own picks on the challenger's stage. Cinematic specials ride in the snapshot (`sp`).
   - Against the web page (no `x`), it is MOHEEB against LUIS in the workshop with the page's four weapons. The page's snapshots and events never see anything it does not know.
@@ -135,7 +135,7 @@ OUT=build-portraits EXTRA_CFLAGS="-DCK_PORTRAITS -DCK_NOUI" ./build.sh && node t
 OUT=build-stills EXTRA_CFLAGS="-DCK_STILLS -DCK_NOUI" ./build.sh && node tools/bake-stills.mjs build-stills/coffee-and-kill.wasc   # needs ffmpeg
 ```
 
-The portraits (`assets/portraits/<key>.png`, 140 px with alpha, matted from a black and a white render) and the stills (`assets/stills/<key>.jpg`, 640 x 360) are committed; bake them again after changing a body or a stage. A shot script can also move the mouse: `{ "from": 20, "to": 24, "ptr": [640, 360], "mb": 1 }`.
+The portraits (`assets/portraits/<key>.png`, 280 px with alpha, matted from a black and a white render; the select averages them down to its cells, the loading card draws them at 212) and the stills (`assets/stills/<key>.jpg`, 640 x 360) are committed; bake them again after changing a body or a stage. A shot script can also move the mouse: `{ "from": 20, "to": 24, "ptr": [640, 360], "mb": 1 }`.
 
 The build needs emsdk and node 22. `third_party/three.c` is a copy of the three.c the shop's other carts use, with two changes: up to 16 lights per type (the arena has 11 point lights), and state names that write light counts as hex digits. `third_party/wasmcart` and `third_party/bellows` are shared with red-tag-rumble.
 
@@ -147,6 +147,7 @@ Test builds take `EXTRA_CFLAGS` and `OUT=build-x`:
 | `-DCK_PICK0="vee" -DCK_WEAPON0="arc" -DCK_PICK1=... -DCK_WEAPON1=... -DCK_STAGE=4` | the picks |
 | `-DCK_TEST_METER` | full EXTREME meters |
 | `-DCK_TEST_ROUND=6` | six second rounds and no dance |
+| `-DCK_TEST_DANCE` | with `CK_TEST_ROUND`: the dance break between the short rounds |
 | `-DCK_NOUI` | clean frames |
 | `-DCK_TEST_TOP` | looking straight down on the ring |
 | `-DCK_ONLINE_TEST="ROOM"` | join a room and accept challenges |
@@ -170,7 +171,7 @@ A run that prints state names such as `lambert+map+skin+fog+atest+ds+l1001` has 
 
 The web version in Chrome on the same Mac holds 60 fps on the fighter select and on Main Street at a 2560x1440 canvas.
 
-Loading KEYHOLDER's world takes one long frame, behind the loading card: a few seconds headless. A body loads in one frame of 130 to 225 ms on the Mac, so the select loads one only when the cursor rests or a pick is confirmed; passing over fighters costs nothing. Picking fighters over and over does not grow memory.
+Loading KEYHOLDER's world takes one long frame, behind the loading card: a few seconds headless. The boot links the KEYHOLDER bodies' GL programs behind the loading bar (about 150 ms more there); before that, the first KEYHOLDER body on the select took one frame of 270 to 400 ms at 1080p. Now a body loads in a frame of about 23 ms on the Mac at 1080p, the first one included, and the select still loads one only when the cursor rests or a pick is confirmed; passing over fighters costs nothing. The station is slower than the Mac and has not been measured. Picking fighters over and over does not grow memory.
 
 ## Credits and licences
 
