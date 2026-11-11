@@ -1181,10 +1181,10 @@ static void pad_keys(void) {
 
 void game_init(void) {
   memset(&G, 0, sizeof G);
-  G.phase = PH_LOAD; G.mode = 1; G.dance_on = true;
+  G.phase = PH_LOAD; G.mode = 1; G.dance_on = true; G.last_track = -1; G.ko_winner = -1; G.slow = 1;
 #ifdef CK_TEST_ROUND
   G.dance_on = false;
-#endif G.last_track = -1; G.ko_winner = -1; G.slow = 1;
+#endif
   snprintf(G.sel.slots[0].ch, 12, "moheeb"); snprintf(G.sel.slots[0].weapon, 12, "pipe");
   snprintf(G.sel.slots[1].ch, 12, "luis"); snprintf(G.sel.slots[1].weapon, 12, "sledge");
   G.sel.level = 1;
