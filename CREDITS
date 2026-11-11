@@ -6,6 +6,8 @@ Animations: Quaternius Universal Animation Library 1 and 2 (CC0), as credited by
 KEYHOLDER bodies' clips are the same library, retargeted onto the VRM humanoid by DOLLY (KEYHOLDER's clips)
 and by tools/rig-vroid.mjs (the clips this game adds).
 Props: Kenney Survival and Factory kits (CC0), as credited by the web version.
+Portraits and stage stills: rendered from the game's own bodies and stages (tools/bake-portraits.mjs,
+tools/bake-stills.mjs).
 
 From KEYHOLDER (../keyholder, MIT; the code in src/kh and the assets in assets/kh):
 Characters: VRoid Project sample avatars. AvatarSample A, B and C via VRoid Hub (modification and
@@ -15,7 +17,7 @@ by KEYHOLDER's tools/prep-vrm.mjs.
 The lab: the HSL-108 model of HeatSync Labs, 108 West Main, Mesa, with its GPL-3.0 printer parts removed.
 Downtown Mesa: map data (c) OpenStreetMap contributors, Open Database License (openstreetmap.org/copyright);
 the street layout, footprints and placements in src/kh/gen/city_data.h are derived from it.
-Cars: Kenney Car Kit (CC0).
+Cars: KEYHOLDER's own procedural models (src/kh/facades_keyholder.inc).
 Storefront geometry: src/kh/facades_mesa.inc is ported from BikeMesa by Luis Montes (MIT, notice in that
 file), github.com/monteslu/cartwheel-examples, games/bikemesa. Real businesses appear only as neutral
 scenery; names and logos belong to their owners, and none of them endorses this game. The sign artwork in

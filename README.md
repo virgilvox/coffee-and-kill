@@ -66,25 +66,29 @@ Both rigs carry the same Quaternius motion, so the clips they share fit the reta
 | `special.c` | EXTREME: KEYHOLDER's cinematics (timeline, blows, effects, camera), and the guest's copy online |
 | `stage.c` | the stages, one table entry each: the workshop backend and KEYHOLDER's (its world under one group, turned and shifted so the ring's centre is the origin), each with its own scene, look, ring and camera rules |
 | `tourney.c` | the bracket as data |
-| `ui_menus.c` | the fighter select, stage select, tourney setup, bracket and champion screens (`ui_kit.h` is what they share with `ui_screens.c`) |
+| `ui_select.c` | the fighter select: the portrait grid, a cursor, a panel and steps for each side, colours, RANDOM; the grid also opens as a modal for the tourney and online screens |
+| `ui_menus.c` | the stage select, tourney setup, bracket and champion screens (`ui_kit.h` is what they share with `ui_screens.c`) |
+| `ui_hint.c` | prompts that name the buttons of the device in use: pad glyphs, key boxes, the mouse and the phone pad |
 | `fighter.c`, `game.c` | the page's fight and flow, now driven by the tables |
 
 ### Adding things
 
-- **A fighter:** an entry in `ROSTER` (`src/roster.c`). A page body names its glb, rig, scale and grip axis. A KEYHOLDER body names its body letter (`src/kh/actor.h`) and an optional palette swap. If the body is new to this game, run `node tools/import-kh.mjs`, which copies every body the roster names.
+- **A fighter:** an entry in `ROSTER` (`src/roster.c`). A page body names its glb, rig, scale and grip axis. A KEYHOLDER body names its body letter (`src/kh/actor.h`). Each fighter has three alternate colours (`alts`): `KH_ALTS` turns coloured clothes round the wheel, `KH_DYES` dyes black, grey and white ones; a page body takes tone tints. A `CK_SHOWROOM` build shows a fighter in all four. If the body is new to this game, run `node tools/import-kh.mjs`, which copies every body the roster names. Then bake its portrait (Building and testing).
 - **A weapon:** an entry in `WEAPONS` (`src/weapons.c`), with a builder. It gets a grip in every hand, a trail, a striking segment and an EXTREME.
-- **A stage:** an entry in `STAGES` (`src/stage.c`). Any KEYHOLDER arena (`world_stage`) or named town place (`world_place`) works as it is. The ring, the yaw of the fighters' line and the camera rules (`cam_lift`, `cam_max`, `cam_clear`, `cam_side`) fit it to a duel. A new kind of place needs a backend in `stage.c`.
+- **A stage:** an entry in `STAGES` (`src/stage.c`) and its short name in the stage select's strip (`SHORT`, `src/ui_menus.c`). Any KEYHOLDER arena (`world_stage`) or named town place (`world_place`) works as it is. The ring, the yaw of the fighters' line and the camera rules (`cam_lift`, `cam_max`, `cam_clear`, `cam_side`) fit it to a duel. A new kind of place needs a backend in `stage.c`. Then bake its still.
 
 Keys in these tables go over the wire and into saves: do not rename them.
 
 ## Modes
 
-- **1 PLAYER, 2 PLAYERS:** pick fighters and weapons (the roster strip and the rack), then PICK STAGE. The stage shows behind the screen once it is loaded. KEYHOLDER's world loads the first time one of its stages is picked, with a loading card, and stays loaded after that.
+- **1 PLAYER, 2 PLAYERS:** the fighter select is a grid of the 13 fighters' portraits and RANDOM, with the two picks standing large at the sides. Each side has its own cursor, tab and panel, and picks in steps: the fighter, the weapon (the fighter's own to start), then READY; in one player mode P1 then picks the CPU's fighter, weapon and level. B steps back, holding B (or Escape) leaves, Y swaps the sides, LB and RB change the colour, Start takes what each side shows. A mirror match puts the later picker in the next colour. A body loads only once the cursor rests on a fighter for a quarter second, or on a confirm. Then the stage select: a strip of every stage's still and RANDOM. A KEYHOLDER stage that is not loaded yet shows its still; its world loads the first time one of its stages is picked, behind a card with both fighters, and stays loaded after that.
 - **TOURNEY:** 4 or 8 entrants. Each one has a fighter, a weapon, and someone to play it: PLAYER, or the CPU at one of three levels.
   - Pick one stage for every match, or a new one each match.
   - It is single elimination, best of three, with sudden death on a tied match.
   - Between matches, the bracket shows results and the next match. CPU-only matches can be watched or skipped. After the final, the champion celebrates.
-  - People take turns on the controls: in a match between a person and the CPU, the person gets the P1 side.
+  - On the setup, A on an entrant opens the fighter grid, left and right change its weapon, Y who plays.
+  - People take turns on the controls: two people split them (pad 1 or WASD on the left, pad 2 or the arrows on the right), and one person against the CPU plays on any pad. The bracket and the round intro say who takes which.
+  - QUIT on the bracket asks again; the pause card in a tourney match goes back to the bracket.
 - **Online:** the lobby is the page's. Carts add an `x` map (wire version 2: fighter, weapon, stage) to presence, challenges and answers, and the web page ignores it.
   - Two carts fight with their own picks on the challenger's stage. Cinematic specials ride in the snapshot (`sp`).
   - Against the web page (no `x`), it is MOHEEB against LUIS in the workshop with the page's four weapons. The page's snapshots and events never see anything it does not know.
@@ -105,12 +109,7 @@ The page's keyboard controls are unchanged:
 
 Gamepads follow the page's standard mapping: X light, Y heavy, B kick, A dodge, either bumper or LT to block, RT for EXTREME. In one player both pads drive P1; in two players pad 1 is P1 and pad 2 is P2. Escape or P pauses, M mutes, N toggles the music, Escape skips the dance break.
 
-Menus work with the keyboard and the mouse. On a cabinet, the pads stand in for the keys:
-
-- the stick or d-pad is the arrows
-- A is Enter, B is Escape
-- Y is Tab (swap sides on the select screen, change the weapon on the tourney setup)
-- Start is Enter on a menu, and pause in a fight
+Menus work with pads, the keyboard, the mouse and phone pads, and their prompts name the buttons of the device last used. On a pad: the stick or d-pad moves, A picks, B goes back, Y swaps sides (or changes who plays on the tourney setup), LB and RB change a fighter's colour, Start begins (and pauses a fight). On the keyboard: the arrows, Enter, Escape or Backspace, Tab, E. In two players the fighter select splits the keyboard: P1 WASD with Q to pick, R back and E colour; P2 the arrows with comma, slash and period. The mouse hovers and clicks, and a right click goes back. Every pad is read whether or not it reports connected, since the station's core flags only port 0.
 
 ## The web version
 
@@ -132,7 +131,11 @@ node tools/rig-vroid.mjs            # rebake assets/anim/rig_vroid.bin from ../k
 node tools/import-kh.mjs            # copy KEYHOLDER's bodies (those the roster names), lab, arenas, signs and tables
 node tools/shot.mjs build/coffee-and-kill.wasc out/shot 120,600 [script.json]
 PREF=1920x1080 TIMING=1 node tools/shot.mjs ...     # the station's frame size, with timings and wasm memory
+OUT=build-portraits EXTRA_CFLAGS="-DCK_PORTRAITS -DCK_NOUI" ./build.sh && node tools/bake-portraits.mjs build-portraits/coffee-and-kill.wasc
+OUT=build-stills EXTRA_CFLAGS="-DCK_STILLS -DCK_NOUI" ./build.sh && node tools/bake-stills.mjs build-stills/coffee-and-kill.wasc   # needs ffmpeg
 ```
+
+The portraits (`assets/portraits/<key>.png`, 140 px with alpha, matted from a black and a white render) and the stills (`assets/stills/<key>.jpg`, 640 x 360) are committed; bake them again after changing a body or a stage. A shot script can also move the mouse: `{ "from": 20, "to": 24, "ptr": [640, 360], "mb": 1 }`.
 
 The build needs emsdk and node 22. `third_party/three.c` is a copy of the three.c the shop's other carts use, with two changes: up to 16 lights per type (the arena has 11 point lights), and state names that write light counts as hex digits. `third_party/wasmcart` and `third_party/bellows` are shared with red-tag-rumble.
 
@@ -148,6 +151,9 @@ Test builds take `EXTRA_CFLAGS` and `OUT=build-x`:
 | `-DCK_TEST_TOP` | looking straight down on the ring |
 | `-DCK_ONLINE_TEST="ROOM"` | join a room and accept challenges |
 | `-DCK_ONLINE_CHALLENGE` | challenge the first player in the room |
+| `-DCK_PORTRAITS -DCK_NOUI` | each fighter alone, framed for its portrait (tools/bake-portraits.mjs) |
+| `-DCK_STILLS -DCK_NOUI` | each stage under the stage select's camera (tools/bake-stills.mjs) |
+| `-DCK_SHOWROOM -DCK_NOUI` | each fighter in its four colours side by side, eight frames apiece |
 
 A run that prints state names such as `lambert+map+skin+fog+atest+ds+l1001` has met programs missing from the table: give its log to `tools/regen.sh`.
 
@@ -158,11 +164,13 @@ A run that prints state names such as `lambert+map+skin+fog+atest+ds+l1001` has 
 | The workshop, MOHEEB against LUIS | 8.7 ms | 273 MB |
 | The workshop, two KEYHOLDER bodies | 6.4 ms | 273 MB |
 | The workshop, a KEYHOLDER fighter, a full EXTREME meter, specials | 7.2 ms | 273 MB |
-| The lab, the town and the arenas (KEYHOLDER's world loaded) | 3.4 to 10 ms | 348 MB |
+| The fighter select, portraits and two bodies | 8.7 ms | 273 MB |
+| The lab, the town and the arenas (KEYHOLDER's world loaded) | 1.4 to 10 ms | 382 MB |
+| Five matches on Main Street and the arenas, with new picks and colours between them | 1.4 to 8.5 ms | 395 MB, flat |
 
-The web version in Chrome on the same Mac holds 60 fps on Main Street at a 2560x1440 canvas.
+The web version in Chrome on the same Mac holds 60 fps on the fighter select and on Main Street at a 2560x1440 canvas.
 
-Loading KEYHOLDER's world takes one long frame, behind the loading card: a few seconds headless. Picking fighters over and over does not grow memory: 39 picks in a row settle at 290 MB.
+Loading KEYHOLDER's world takes one long frame, behind the loading card: a few seconds headless. A body loads in one frame of 130 to 225 ms on the Mac, so the select loads one only when the cursor rests or a pick is confirmed; passing over fighters costs nothing. Picking fighters over and over does not grow memory.
 
 ## Credits and licences
 
