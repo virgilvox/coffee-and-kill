@@ -29,7 +29,7 @@ enum { OP_RECT, OP_DASH, OP_TEXT, OP_MARK };
 
 const char *scr_cur;
 ck_sel *scr_sel; int scr_mode = 1;
-int scr_menu_idx, scr_sel_focus = 3;
+int scr_menu_idx;
 /* :focus-visible: the online and pads screens' focus ring shows once the keyboard moved the focus */
 bool kbd_nav;
 
@@ -605,6 +605,7 @@ static void online_key(int code) {
 void scr_key(int e) {
   const char *P = scr_cur;
   if (!P) return;
+  if (select_modal_active()) { select_key(e); return; }
   if (!strcmp(P, "s-online")) { online_key(e); return; }
   if (!strcmp(P, "s-pads")) {
     if (e == WC_KEY_UP || e == WC_KEY_DOWN || e == WC_KEY_LEFT || e == WC_KEY_RIGHT || e == WC_KEY_TAB) {
@@ -634,6 +635,7 @@ static bool was_down;
 void scr_pointer(float x, float y, bool pressed) {
   const char *P = scr_cur;
   (void)was_down;
+  if (select_modal_active()) { select_pointer(x, y, pressed); return; }
   /* mouseover: a .menu .btn under the pointer becomes the selected one */
   int n; btn_t *b = menu_btns(&n);
   for (int i = 0; i < n; i++) if (btn_hit(&b[i], x, y) && i != scr_menu_idx) { scr_menu_idx = i; update_menu_sel(); }

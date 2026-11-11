@@ -70,7 +70,7 @@ typedef struct fighter {
 
 typedef struct { bool enabled; float dist_to; } fight_ctx;
 
-fighter *fighter_new(int roster_index);
+fighter *fighter_new(int roster_index, int colour);
 void fighter_free(fighter *f);
 void fighter_set_weapon(fighter *f, int w);
 void fighter_reset(fighter *f);

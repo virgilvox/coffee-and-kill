@@ -31,10 +31,10 @@ int move_index(const char *id) { for (int i = 0; i < MV_N; i++) if (id && !strcm
 
 static const char *HIT_CLIPS[5] = {"Hit_Chest", "Hit_Head", "Hit_Stomach", "Hit_Shoulder_L", "Hit_Shoulder_R"};   /* R0 */
 
-fighter *fighter_new(int ri) {
+fighter *fighter_new(int ri, int colour) {
   fighter *f = calloc(1, sizeof *f);
   f->ri = ri; f->name = roster_get(ri)->name;
-  f->body = body_new(ri);
+  f->body = body_new(ri, colour);
   f->root = body_root(f->body);
   f->mixer = body_mixer(f->body);
   f->rig = body_rig(f->body);

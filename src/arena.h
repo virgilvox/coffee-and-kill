@@ -22,6 +22,7 @@ int arena_build(t3_scene *scene, int stage);
 void arena_update(float dt, float t);
 /* arena.focus: the robot eye looks at it (the fighters' midpoint, y 1.2) */
 void arena_set_focus(float x, float y, float z);
+void arena_menu_light(bool on);   /* the sun from the front (the fighter select) or where the page has it */
 
 /* the additive and transparent effects the arena owns (the light cones of
  * the windows, the beacon beams, the dust, the sparks) are drawn with fx.h,

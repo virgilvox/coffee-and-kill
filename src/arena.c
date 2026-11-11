@@ -834,7 +834,7 @@ static t3_object *cones[3];
 static unsigned cone_tex, dust_tex;
 #define CP 180
 static float dust_pos[CP * 3], dust_ph[CP][3];
-static t3_light *warm[2];
+static t3_light *warm[2], *sun_l;
 
 /* ---- the build ---- */
 
@@ -1099,6 +1099,7 @@ static void build_lights(void) {
   t3_light *hemi = t3_hemisphere_light_new(13621503, 3814184, 0.85f); add(S, hemi); t3_release(hemi);
   t3_light *sun = t3_directional_light_new(16773340, 2.4f);
   t3_object_set_position(sun, -7, 12, 5);
+  sun_l = sun;
   t3_object_set_position(sun->target, 0, 0, 0);
   sun->base.cast_shadow = true;
   sun->shadow->map_width = sun->shadow->map_height = 2048;
@@ -1147,6 +1148,12 @@ int arena_build(t3_scene *scene, int stage) {
 }
 
 void arena_set_focus(float x, float y, float z) { focus = t3_v3(x, y, z); }
+/* the menus' light: the sun from in front of the camera and low, so a fighter facing it
+ * is lit across the face (the page's sun, up on the left, leaves KEYHOLDER's cel faces half dark) */
+void arena_menu_light(bool on) {
+  if (!sun_l) return;
+  if (on) t3_object_set_position(sun_l, 0, 3.2f, 11); else t3_object_set_position(sun_l, -7, 12, 5);
+}
 
 void arena_update(float X, float PA) {
   for (int i = 0; i < nups; i++) ups[i].fn(&ups[i], X, PA);

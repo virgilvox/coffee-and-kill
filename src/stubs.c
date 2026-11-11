@@ -50,10 +50,10 @@ W void ui_draw(void) {}
 W const char *ui_screen(void) { return stub_screen; }
 W void ui_show(const char *s) { stub_screen = s; }
 W void ui_hide_all(void) { stub_screen = NULL; }
-W void ui_key(int c) { (void)c; }
+W bool ui_key(int c) { (void)c; return false; }
+W bool ui_key_used(int i) { (void)i; return false; }
 W void ui_pointer(float x, float y, bool p) { (void)x; (void)y; (void)p; }
 W void ui_set_select(ck_sel *s, int m) { (void)s; (void)m; }
-W void ui_render_select(void) {}
 W void ui_set_names(const char *a, const char *b, const char *c, const char *d) { (void)a; (void)b; (void)c; (void)d; }
 W void ui_set_health(int i, float p, bool n) { (void)i; (void)p; (void)n; }
 W void ui_set_meter(int i, float p) { (void)i; (void)p; }

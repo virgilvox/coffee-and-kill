@@ -56,6 +56,11 @@ void stage_camera_rules(float *lift, float *max_dist, bool *one_side) {
   *one_side = cur >= 0 && STAGES[cur].cam_side;
   *max_dist = cur >= 0 && STAGES[cur].cam_max > 0 ? STAGES[cur].cam_max : 99;
 }
+void stage_menu_light(bool on) {
+  static int was = -1;
+  if (was == (int)on) return;
+  was = on; arena_menu_light(on);
+}
 bool stage_shadows(void) { return cur < 0 || STAGES[cur].kind == STK_WORKSHOP; }
 bool stage_needs_load(int s) { return s >= 0 && s < STAGE_N && (STAGES[s].kind == STK_WORKSHOP ? !ws_ready : !kh_ready); }
 

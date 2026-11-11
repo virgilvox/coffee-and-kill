@@ -6,6 +6,7 @@
  * checked against Chrome's layout of the page (element boxes and text line
  * boxes read over the DevTools protocol). */
 #include "ui_int.h"
+#include "ui_kit.h"
 #include "ck.h"
 #include "audio.h"
 #include "input.h"
@@ -638,17 +639,23 @@ void ui_hud(bool on) { H.on = on; }
 
 /* ================================================================== frame and draw */
 
+static bool key_used[64];
 void ui_frame(float dt) {
   ui_now += dt;
   if (H.toast.show && ui_now >= H.toast.until) { H.toast.show = false; tr_set(&H.toast.op, 0, ui_now, 0.15f, 0); }
   for (int i = 0; i < NFX; i++) if (H.fx[i].live && ui_now - H.fx[i].t0 > 0.85f) H.fx[i].live = false;
   scr_frame();
-  /* keys and the mouse go to the shown screen (Rr.onKey ignores keys without one) */
+  if (select_modal_active()) select_frame(dt);
+  else if (scr_cur && menus_owns(scr_cur)) menus_frame(dt);
+  /* keys and the mouse go to the shown screen (Rr.onKey ignores keys without one). A key the
+   * screen used is marked, so the game's own handler (pause, skip) does not act on it too */
   const int *ev; int n = input_key_events(&ev);
-  for (int i = 0; i < n; i++) ui_key(ev[i]);
+  for (int i = 0; i < n; i++) key_used[i] = ui_key(ev[i]);
+  for (int i = n; i < 64; i++) key_used[i] = false;
   const ck_pointer *p = input_pointer();
   if (p->active) ui_pointer(p->x, p->y, p->pressed);
 }
+bool ui_key_used(int i) { return i >= 0 && i < 64 && key_used[i]; }
 
 static void draw_hud(void) {
   /* the sides: repaint when what they show moved */
@@ -742,6 +749,7 @@ void ui_draw(void) {
   ov_vignette();
   if (H.on) draw_hud();
   scr_draw();
+  if (select_modal_active()) select_draw();
   /* #flash: opacity P -> 0 over e ms, ease-out */
   if (H.flash_dur > 0) {
     float t = (ui_now - H.flash_t0) / H.flash_dur;
@@ -755,10 +763,15 @@ void ui_draw(void) {
 const char *ui_screen(void) { return scr_cur; }
 void ui_show(const char *s) { scr_show(s); }
 void ui_hide_all(void) { scr_show(NULL); }
-void ui_key(int code) { if (scr_cur && strcmp(scr_cur, "s-load")) scr_key(code); }
+/* the pause card leaves Escape and P to the game (they resume); every other screen uses its keys */
+bool ui_key(int code) {
+  if (!scr_cur || !strcmp(scr_cur, "s-load")) return false;
+  bool pause = !strcmp(scr_cur, "s-pause");
+  scr_key(code);
+  return !pause || (code != WC_KEY_ESCAPE && code != WC_KEY_P);
+}
 void ui_pointer(float x, float y, bool pressed) { if (scr_cur) scr_pointer(x, y, pressed); }
-void ui_set_select(ck_sel *sel, int mode) { scr_sel = sel; scr_mode = mode; scr_sel_focus = mode == 1 ? 5 : 4; scr_select_changed(); }
-void ui_render_select(void) { scr_select_changed(); }
+void ui_set_select(ck_sel *sel, int mode) { scr_sel = sel; scr_mode = mode; }
 void ui_set_end(const char *name, bool wins, const char *sub) { scr_end_changed(name, wins, sub); }
 void ui_load(float p, const char *msg) { scr_load(p, msg, false); }
 void ui_load_error(const char *msg) { scr_load(-1, msg, true); }

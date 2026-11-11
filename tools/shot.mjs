@@ -17,6 +17,8 @@
 // script.json entries, frame ranges inclusive:
 //   { "from": 0, "to": 30, "pad": 0, "buttons": ["A"], "lx": 0, "ly": -32767, "rx": 0, "ry": 0, "lt": 0, "rt": 32767 }
 //   { "from": 10, "to": 12, "keys": ["Enter", "KeyQ", "ArrowDown", "ShiftLeft"] }   keyboard (held over the range)
+//   { "from": 20, "to": 24, "ptr": [640, 360], "mb": 1 }   the mouse at a point of the frame (1 the left button
+//                                                          held, 2 the right, 0 or none: hovering)
 // sticks are -32767..32767 (y positive is down), triggers 0..32767.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
@@ -90,7 +92,7 @@ const KEYC = { Enter: 0x28, Escape: 0x29, Backspace: 0x2a, Tab: 0x2b, Space: 0x2
   Period: 0x37, Slash: 0x38, ArrowRight: 0x4f, ArrowLeft: 0x50, ArrowDown: 0x51, ArrowUp: 0x52,
   ShiftLeft: 0xe1, ShiftRight: 0xe5 };
 const keyCode = (k) => KEYC[k] ?? (/^Key[A-Z]$/.test(k) ? 0x04 + k.charCodeAt(3) - 65 : /^Digit[1-9]$/.test(k) ? 0x1e + +k[5] - 1 : k === 'Digit0' ? 0x27 : null);
-let heldKeys = new Set();
+let heldKeys = new Set(), lastPtr = null;
 const audioChunks = [];
 for (let f = 0; f <= last; f++) {
   const pads = [0, 1, 2, 3].map(() => ({ connected: true, buttons: 0,
@@ -109,6 +111,12 @@ for (let f = 0; f <= last; f++) {
     if (s.rt !== undefined) p.rightTrigger = s.rt;
     if (s.name !== undefined) p.name = s.name;
   }
+  // the mouse: the latest entry covering this frame, else it stays where it was with no button down
+  let ptr = null;
+  for (const s of script) if (s.ptr && f >= s.from && f <= s.to) ptr = s;
+  if (ptr) host.setPointer(0, ptr.ptr[0], ptr.ptr[1], ptr.mb ?? 0, true);
+  else if (lastPtr) host.setPointer(0, lastPtr.ptr[0], lastPtr.ptr[1], 0, true);
+  if (ptr) lastPtr = ptr;
   const want = new Set();
   for (const s of script) if (s.keys && f >= s.from && f <= s.to) for (const k of s.keys) want.add(keyCode(k));
   for (const k of heldKeys) if (!want.has(k)) host.keyUp(k, 0);

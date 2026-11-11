@@ -48,12 +48,26 @@ int input_text(const char **utf8);
 bool input_pad_pressed(int pad, uint32_t btn);
 bool input_pad_down(int pad, uint32_t btn);
 bool input_pad_connected(int pad);
-/* a stick or d-pad direction that went past the menu threshold this frame:
- * -1 / +1 on x and y (y +1 = down), 0 = none */
-void input_pad_nav(int pad, int *dx, int *dy);
 
-/* the mouse (wasmcart pointer 0), in CSS pixels */
-typedef struct { bool active; float x, y; bool down, pressed, released; } ck_pointer;
+/* the mouse (wasmcart pointer 0), in CSS pixels: the primary button (down, pressed, released),
+ * the secondary (rdown, rpressed) and whether it moved this frame */
+typedef struct { bool active; float x, y; bool down, pressed, released, rdown, rpressed, moved; } ck_pointer;
 const ck_pointer *input_pointer(void);
+
+/* the device a person last used, so prompts can name the right buttons: a key, a pad, the
+ * mouse or a phone pad. A pad at boot counts as used (the station has no keyboard). */
+enum { DEV_KEYS, DEV_PAD, DEV_MOUSE, DEV_PHONE };
+extern int input_last_dev;
+void input_note_dev(int dev);
+
+/* menu events by player, from the pads and the phone pads (the keyboard's are the screen's to
+ * read, since its keys depend on the screen and the mode). Pad 0 is player 0 and pad 1 player
+ * 1; in one player mode every pad is player 0. A held direction repeats. */
+enum { ME_UP, ME_DOWN, ME_LEFT, ME_RIGHT, ME_OK, ME_BACK, ME_SWAP, ME_PREV, ME_NEXT, ME_START, ME_N };
+typedef struct { int player, ev, dev; } menu_ev;
+int input_menu_events(const menu_ev **evs);
+void input_push_menu(int player, int ev, int dev);   /* a phone pad's (online.c) */
+/* how long the back button (B) has been held on any pad, seconds (0: not held) */
+float input_back_held(void);
 
 #endif

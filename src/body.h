@@ -16,14 +16,18 @@
 #include "anim.h"
 #include "roster.h"
 
-enum { BONE_HIPS, BONE_RHAND, BONE_LHAND, BONE_RFOOT, BONE_RTOE, BONE_N };
+enum { BONE_HIPS, BONE_RHAND, BONE_LHAND, BONE_RFOOT, BONE_RTOE, BONE_HEAD, BONE_N };
 
 typedef struct body body;
 
-body *body_new(int roster_index);
+body *body_new(int roster_index, int colour);   /* colour 0 to 3 (roster.h ROSTER_COLOURS) */
 void body_free(body *b);
 void body_attach(body *b, t3_scene *scene);       /* into this scene (NULL: out of every scene) */
 int body_roster(const body *b);
+int body_colour(const body *b);
+/* a new colour in place: true for a KEYHOLDER body (a palette swap), false for a page body,
+ * which takes its colour as it loads (make a new one) */
+bool body_set_colour(body *b, int colour);
 
 t3_object *body_root(body *b);                    /* place and turn this one */
 ck_mixer *body_mixer(body *b);

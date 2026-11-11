@@ -78,13 +78,12 @@ void scr_frame(void);
 void scr_draw(void);                          /* the shown screen */
 void scr_key(int code);                       /* Rr.onKey (when a screen is up) */
 void scr_pointer(float x, float y, bool pressed);
-void scr_select_changed(void);
 void scr_online_changed(void);
 void scr_pads_changed(void);
 void scr_end_changed(const char *name, bool wins, const char *sub);
 void scr_load(float p, const char *msg, bool err);
 extern const char *scr_cur;                   /* the shown screen id, NULL = none */
 extern ck_sel *scr_sel; extern int scr_mode;
-extern int scr_menu_idx, scr_sel_focus;
+extern int scr_menu_idx;
 
 #endif

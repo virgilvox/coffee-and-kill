@@ -169,28 +169,34 @@ static void place_fighters(void) {
 }
 
 /* the picks onto the two fighters: a fighter already made for a pick is kept (or swapped to its
- * new side), one no longer picked is freed, a new pick is loaded */
+ * new side, or recoloured in place), one no longer picked is freed, a new pick is loaded */
+static int want_ri(int t) { int r = roster_index(G.sel.slots[t].ch); return r < 0 ? t : r; }
+static int want_colour(int t) { int c = G.sel.slots[t].colour; return c >= 0 && c < ROSTER_COLOURS ? c : 0; }
+static void swap_if_crossed(void) {
+  int w0 = want_ri(0), w1 = want_ri(1);
+  if (G.f[0] && G.f[1] && G.f[0]->ri == w1 && G.f[1]->ri == w0 && w0 != w1) { fighter *x = G.f[0]; G.f[0] = G.f[1]; G.f[1] = x; }
+}
+/* whether slot t's fighter is the pick (a KEYHOLDER body takes a new colour on the spot) */
+static bool slot_ready(int t) {
+  return G.f[t] && G.f[t]->ri == want_ri(t) && body_set_colour(G.f[t]->body, want_colour(t));
+}
+static void load_slot(int t) {
+  if (G.f[t]) fighter_free(G.f[t]);
+  G.f[t] = fighter_new(want_ri(t), want_colour(t));
+  body_attach(G.f[t]->body, stage_scene());
+}
+static void dress_slot(int t) {
+  fighter *e = G.f[t];
+  e->slot = t; e->trail = G.trail[t];
+  int w = weapon_index(G.sel.slots[t].weapon);
+  if (w < 0) w = 0;
+  if (e->weapon_key != w) fighter_set_weapon(e, w);
+  trail_set_color(e->trail, e->W->trail);
+  body_blob_shadow(e->body, !stage_shadows());
+}
 static void apply_sel(void) {
-  int want[2];
-  for (int t = 0; t < 2; t++) { want[t] = roster_index(G.sel.slots[t].ch); if (want[t] < 0) want[t] = t; }
-  if (G.f[0] && G.f[1] && G.f[0]->ri == want[1] && G.f[1]->ri == want[0] && want[0] != want[1]) {
-    fighter *x = G.f[0]; G.f[0] = G.f[1]; G.f[1] = x;
-  }
-  for (int t = 0; t < 2; t++) {
-    if (G.f[t] && G.f[t]->ri == want[t]) continue;
-    if (G.f[t]) fighter_free(G.f[t]);
-    G.f[t] = fighter_new(want[t]);
-    body_attach(G.f[t]->body, stage_scene());
-  }
-  for (int t = 0; t < 2; t++) {
-    fighter *e = G.f[t];
-    e->slot = t; e->trail = G.trail[t];
-    int w = weapon_index(G.sel.slots[t].weapon);
-    if (w < 0) w = 0;
-    if (e->weapon_key != w) fighter_set_weapon(e, w);
-    trail_set_color(e->trail, e->W->trail);
-    body_blob_shadow(e->body, !stage_shadows());
-  }
+  swap_if_crossed();
+  for (int t = 0; t < 2; t++) { if (!slot_ready(t)) load_slot(t); dress_slot(t); }
   const char *a, *b; labels(&a, &b);
   gui_set_names(fname(0), fname(1), a, b);
   place_fighters();
@@ -205,6 +211,75 @@ static void use_stage(int s) {
 
 static void menu_mode(void) {
   G.phase = PH_MENU; gui_hud(false); gui_set_hint(""); music_set_level(0.35f); place_fighters();
+}
+
+/* ---------------------------------------------------------------- the fighter select */
+/* the two stand large at either side of the select, turned halfway between the camera and each
+ * other; ui_select.c draws their name plates under them (screen x 270 and 1010) */
+#define SEL_X 1.68f
+#define SEL_YAW 0.62f
+static double pick_at[2]; static bool pick_now[2], cheer_req[2]; static float cheer_end[2];
+static bool on_screen(const char *id) { const char *s = ui_screen(); return s && !strcmp(s, id); }
+static void sel_place(int t) {
+  fighter *f = G.f[t];
+  if (!f) return;
+  t3_object_set_position(f->root, t ? SEL_X : -SEL_X, 0, 0);
+  f->vel = (v3){0, 0, 0};
+  f->yaw = t ? -SEL_YAW : SEL_YAW;
+  t3_object_set_rotation(f->root, 0, f->yaw, 0);
+  body_teleport(f->body);
+  body_visible(f->body, true);
+}
+static void cb_pick(int t, bool now) { pick_at[t] = ck_now(); pick_now[t] |= now; }
+static void cb_cheer(int t) { cheer_req[t] = true; }
+/* the fighter's victory clip, once, then back to the stance */
+static void cheer(int t) {
+  fighter *f = G.f[t];
+  const char *wc = roster_get(f->ri)->win_clip;
+  if (!wc || rig_clip_index(f->rig, wc) < 0) wc = "Celebration";
+  fighter_play(f, wc, 0.2f, true, 1, 0, true);
+  f->state = ST_WIN;
+  cheer_end[t] = G.t + fminf(f->rig->clips[rig_clip_index(f->rig, wc)].dur, 2.4f);
+}
+/* the bodies follow the picks: a new fighter loads once the cursor has rested on it a quarter of
+ * a second (at once on a confirm), one a frame, the old one standing until then; a weapon or a
+ * KEYHOLDER body's colour changes on the spot */
+static void select_bodies(void) {
+  fighter *was0 = G.f[0];
+  swap_if_crossed();
+  if (G.f[0] != was0) for (int t = 0; t < 2; t++) { dress_slot(t); sel_place(t); }
+  bool loaded = false;
+  for (int t = 0; t < 2; t++) {
+    if (!slot_ready(t)) {
+      if (loaded || (!pick_now[t] && ck_now() - pick_at[t] < 0.25)) continue;
+      load_slot(t); dress_slot(t); sel_place(t); cheer_end[t] = 0;
+      loaded = true;
+    }
+    dress_slot(t);
+    pick_now[t] = false;
+    if (cheer_req[t]) { cheer_req[t] = false; cheer(t); }
+  }
+}
+/* the select's frame: the bodies in their stance (or cheering), turned to the camera */
+static void post_fx(float A, float P);
+static void step_menu(float A) {
+  select_bodies();
+  fight_ctx ctx = {false, 0};
+  intent_t none = {0};
+  for (int k = 0; k < 2; k++) {
+    fighter *f = G.f[k];
+    if (cheer_end[k] > 0 && G.t >= cheer_end[k]) { cheer_end[k] = 0; f->state = ST_IDLE; fighter_play(f, "Sword_Idle", 0.35f, false, 1, 0, true); }
+    f->yaw = k ? -SEL_YAW : SEL_YAW;
+    fighter_update(f, A, &none, (v2){0, 0}, NULL, &ctx);
+  }
+  post_fx(A, A);
+}
+/* onto the select: the workshop behind it, the picks loaded and standing */
+static void enter_select(void) {
+  use_stage(0);
+  apply_sel();
+  for (int t = 0; t < 2; t++) { sel_place(t); cheer_end[t] = 0; cheer_req[t] = pick_now[t] = false; }
+  G.cam_snap = true;
 }
 
 static void start_round(void);
@@ -593,7 +668,9 @@ static void update_camera(float A) {
       float a = v ? 0 : -1.9f;
       v3 c = {cosf(z), 0, -sinf(z)};
       g = (v3){-c.x * a, (v ? 0.55f : 1.25f) - c.y * a, -c.z * a};
-      if (v) { w = (v3){sinf(z) * 5.6f, 1.5f, cosf(z) * 5.6f + 0.6f}; g = (v3){0, 0.12f, 0}; }
+      /* the select: low, looking a touch up, far enough back that both stand whole at the sides,
+       * the workshop's sign kept under the head; only a slow sway */
+      if (v) { float sw = sinf(G.t * 0.3f) * 0.08f; w = (v3){sw, 0.25f, 4.4f}; g = (v3){sw * 0.5f, 0.48f, 0}; clip = false; }
     }
   } else if (G.phase == PH_DANCE) {
     w = (v3){0, 1.5f, 5.7f}; g = (v3){0, 1.1f, 0};
@@ -670,6 +747,8 @@ static void step(float A) {
   G.cam_fwd = fl > 0 ? (v2){fx / fl, fz / fl} : (v2){0, -1};
   if (G.net_role == NET_GUEST) { step_guest(A); return; }
   if (G.phase == PH_DANCE) { step_dance(A); return; }
+  stage_menu_light(G.phase == PH_MENU && on_screen("s-select"));
+  if (G.phase == PH_MENU && on_screen("s-select")) { step_menu(A); return; }
   float P;
   if (G.freeze > 0) { G.freeze -= A; P = 0; } else P = A * G.slow;
   fighter *e = G.f[0], *t = G.f[1];
@@ -983,6 +1062,7 @@ void game_begin_online(int role, const char *my_name, const online_pick *me, con
   const online_pick *L0 = t ? me : opp, *L1 = t ? opp : me;
   snprintf(G.sel.slots[0].ch, 12, "%s", L0->fighter); snprintf(G.sel.slots[0].weapon, 12, "%s", L0->weapon);
   snprintf(G.sel.slots[1].ch, 12, "%s", L1->fighter); snprintf(G.sel.slots[1].weapon, 12, "%s", L1->weapon);
+  G.sel.slots[0].colour = 0; G.sel.slots[1].colour = !strcmp(L0->fighter, L1->fighter);   /* a mirror match: the guest's side in another colour */
   G.cpu[0] = G.cpu[1] = false; G.in_tourney = false;
   int st = stage_index(me->stage); if (st < 0) st = 0;
   G.has_online_names = true;
@@ -1031,6 +1111,7 @@ static void tourney_play(void) {
   const t_entrant *A = &T->e[M->a], *B = &T->e[M->b];
   snprintf(G.sel.slots[0].ch, 12, "%s", ROSTER[A->fighter].key); snprintf(G.sel.slots[0].weapon, 12, "%s", WEAPONS[A->weapon].key);
   snprintf(G.sel.slots[1].ch, 12, "%s", ROSTER[B->fighter].key); snprintf(G.sel.slots[1].weapon, 12, "%s", WEAPONS[B->weapon].key);
+  G.sel.slots[0].colour = 0; G.sel.slots[1].colour = A->fighter == B->fighter;   /* a mirror match: side B in its first alternate */
   char la[8], lb[8];
   set_sides(A->ctl != TC_PLAYER, A->ctl - 1, entrant_label(M->a, la, sizeof la), B->ctl != TC_PLAYER, B->ctl - 1, entrant_label(M->b, lb, sizeof lb));
   G.sel.stage = tourney_stage_of(T, T->cur, STAGE_N);
@@ -1043,6 +1124,7 @@ static void tourney_champion(void) {
   tourney_t *T = &G.T;
   const t_entrant *C = &T->e[T->champion];
   snprintf(G.sel.slots[0].ch, 12, "%s", ROSTER[C->fighter].key); snprintf(G.sel.slots[0].weapon, 12, "%s", WEAPONS[C->weapon].key);
+  G.sel.slots[0].colour = 0;
   apply_sel();
   G.phase = PH_MENU; gui_hud(false); gui_set_hint("");
   fighter *f = G.f[0];
@@ -1087,7 +1169,7 @@ static void act(const char *v) {
   if (!strcmp(v, "1p") || !strcmp(v, "2p")) {
     G.mode = v[0] == '1' ? 1 : 2; input_mode = G.mode;
     set_sides(false, 0, NULL, G.mode == 1, G.sel.level, NULL);
-    ui_set_select(&G.sel, G.mode); apply_sel(); ui_show("s-select");
+    ui_set_select(&G.sel, G.mode); enter_select(); ui_show("s-select");
   } else if (!strcmp(v, "online")) online_open();
   else if (!strcmp(v, "onback")) { online_back(); ui_show("s-title"); }
   else if (!strcmp(v, "ollobby")) online_main_lobby();
@@ -1106,7 +1188,7 @@ static void act(const char *v) {
     if (s && !strcmp(s, "s-controls")) ui_show(G.screen_before_controls); else ui_show("s-title");
   } else if (!strcmp(v, "start")) go_match();
   else if (!strcmp(v, "stage")) { if (!stage_needs_load(G.sel.stage)) use_stage(G.sel.stage); ui_show("s-stage"); }
-  else if (!strcmp(v, "stageback")) ui_show("s-select");
+  else if (!strcmp(v, "stageback")) { enter_select(); ui_select_return(); ui_show("s-select"); }
   else if (!strncmp(v, "t", 1) && tourney_act(v)) {}
   else if (!strcmp(v, "resume")) toggle_pause();
   else if (!strcmp(v, "quit")) { G.paused = false; G.in_tourney = false; special_stop(); use_stage(0); menu_mode(); show_both(); ui_show("s-title"); }
@@ -1115,16 +1197,8 @@ static void act(const char *v) {
     else start_match();
   } else if (!strcmp(v, "again")) {
     if (G.net_role) { game_leave_online(""); return; }
-    G.paused = false; special_stop(); menu_mode(); ui_set_select(&G.sel, G.mode); ui_show("s-select");
+    G.paused = false; special_stop(); menu_mode(); ui_set_select(&G.sel, G.mode); enter_select(); ui_show("s-select");
   }
-}
-static void cb_weapon(int p, const char *w) { snprintf(G.sel.slots[p].weapon, 12, "%s", w); apply_sel(); }
-/* a new fighter in a slot comes with its own weapon */
-static void cb_fighter(int p, const char *key) {
-  int ri = roster_index(key); if (ri < 0) return;
-  snprintf(G.sel.slots[p].ch, 12, "%s", key);
-  snprintf(G.sel.slots[p].weapon, 12, "%s", ROSTER[ri].weapon);
-  apply_sel();
 }
 /* the stage screen shows the stage it is on when that needs no loading */
 static void cb_stage(int st) {
@@ -1132,18 +1206,13 @@ static void cb_stage(int st) {
   if (!stage_needs_load(st)) use_stage(st);
   ui_menus_changed();
 }
-static void cb_swap(void) {
-  char a[12]; snprintf(a, sizeof a, "%s", G.sel.slots[0].ch);
-  snprintf(G.sel.slots[0].ch, 12, "%s", G.sel.slots[1].ch); snprintf(G.sel.slots[1].ch, 12, "%s", a);
-  apply_sel();
-}
 static void cb_diff(int l) { G.sel.level = l; G.level[1] = l; }
 
 /* the window keydown handler of the page: Escape skips the dance, Escape or P
  * pauses, M mutes, N toggles the music */
-static void app_key(int c) {
-  if (c == WC_KEY_ESCAPE && G.phase == PH_DANCE) { skip_dance(); return; }
-  if (c == WC_KEY_ESCAPE || c == WC_KEY_P) {
+static void app_key(int c, bool used) {
+  if (!used && c == WC_KEY_ESCAPE && G.phase == PH_DANCE) { skip_dance(); return; }
+  if (!used && (c == WC_KEY_ESCAPE || c == WC_KEY_P)) {
     const char *s = ui_screen();
     if (s && !strcmp(s, "s-pause")) toggle_pause();
     else if (!s) toggle_pause();
@@ -1152,30 +1221,113 @@ static void app_key(int c) {
   if (c == WC_KEY_N) ui_toast(music_toggle() ? "MUSIC ON" : "MUSIC OFF");
 }
 
-/* the cabinet's pads in the menus (the page leaves menus to the keyboard and
- * mouse): the stick and d-pad are the arrows, A is Enter, B is Escape, Y is
- * Tab (swap sides), Start is Enter on a menu and Escape (pause) in a fight */
+/* the cabinet's pads (and the phone pads) on the screens that read keys: input.c's menu events
+ * as the keys they stand for (the stick and d-pad the arrows, A Enter, B Escape, Y Tab, Start
+ * Enter on a menu and Escape, to pause, in a fight). The fighter select and its grid read the
+ * events by player themselves. */
 static void pad_keys(void) {
   const char *s = ui_screen();
-  for (int p = 0; p < 2; p++) {
-    if (!input_pad_connected(p)) continue;
-    bool menu = s != NULL;
-    if (menu) {
-      int dx, dy; input_pad_nav(p, &dx, &dy);
-      if (dy < 0) input_push_key(WC_KEY_UP);
-      if (dy > 0) input_push_key(WC_KEY_DOWN);
-      if (dx < 0) input_push_key(WC_KEY_LEFT);
-      if (dx > 0) input_push_key(WC_KEY_RIGHT);
-      if (input_pad_pressed(p, WC_BTN_A)) input_push_key(WC_KEY_ENTER);
-      if (input_pad_pressed(p, WC_BTN_B)) input_push_key(WC_KEY_ESCAPE);
-      if (input_pad_pressed(p, WC_BTN_Y)) input_push_key(WC_KEY_TAB);
-      if (input_pad_pressed(p, WC_BTN_START)) input_push_key(!strcmp(s, "s-pause") ? WC_KEY_ESCAPE : WC_KEY_ENTER);
-    } else {
-      if (input_pad_pressed(p, WC_BTN_START)) input_push_key(WC_KEY_ESCAPE);
-      if (G.phase == PH_DANCE && input_pad_pressed(p, WC_BTN_B)) input_push_key(WC_KEY_ESCAPE);
+  online_pads_menu(s != NULL);
+  if (ui_reads_pads()) return;
+  const menu_ev *e; int n = input_menu_events(&e);
+  for (int i = 0; i < n; i++) {
+    int k = 0;
+    if (s) switch (e[i].ev) {
+      case ME_UP: k = WC_KEY_UP; break;
+      case ME_DOWN: k = WC_KEY_DOWN; break;
+      case ME_LEFT: k = WC_KEY_LEFT; break;
+      case ME_RIGHT: k = WC_KEY_RIGHT; break;
+      case ME_OK: k = WC_KEY_ENTER; break;
+      case ME_BACK: k = WC_KEY_ESCAPE; break;
+      case ME_SWAP: k = WC_KEY_TAB; break;
+      case ME_START: k = !strcmp(s, "s-pause") ? WC_KEY_ESCAPE : WC_KEY_ENTER; break;
     }
+    else if (e[i].ev == ME_START || (G.phase == PH_DANCE && e[i].ev == ME_BACK)) k = WC_KEY_ESCAPE;
+    if (k) input_push_key(k);
   }
 }
+
+#ifdef CK_PORTRAITS
+/* test builds (-DCK_PORTRAITS -DCK_NOUI): each fighter's portrait for the select's grid, baked by
+ * tools/bake-portraits.mjs. Fighter i stands alone in the workshop's light (every other mesh
+ * hidden), unarmed in its standing idle, under a fixed 3/4 head and shoulders camera with the
+ * face at the frame's centre: over black on frame i * 8 + 6 and over white on frame i * 8 + 7,
+ * so the tool can take the alpha from the difference. */
+static int por_n = -1;
+static fighter *por_f;
+static void hide_meshes(t3_object *o, t3_object *keep) {
+  if (o == keep) return;
+  if (o->type == T3_MESH || o->type == T3_SKINNED_MESH || o->type == T3_INSTANCED_MESH || o->type == T3_POINTS ||
+      o->type == T3_LINE || o->type == T3_LINE_SEGMENTS || o->type == T3_SPRITE || o->type == T3_LOD) o->visible = false;
+  for (int i = 0; i < o->child_count; i++) hide_meshes(o->children[i], keep);
+}
+static void no_cast(t3_object *o, void *ctx) { (void)ctx; o->cast_shadow = false; }
+static t3_light *find_sun(t3_object *o) {
+  if (o->type == T3_DIRECTIONAL_LIGHT) return (t3_light *)o;
+  for (int i = 0; i < o->child_count; i++) { t3_light *l = find_sun(o->children[i]); if (l) return l; }
+  return NULL;
+}
+static void portrait_frame(void) {
+  int n = ++por_n, i = n / 8, k = n % 8;
+  if (i >= ROSTER_N) return;
+  t3_scene *sc = stage_scene();
+  if (k == 0) {
+    for (int t = 0; t < 2; t++) if (G.f[t]) body_visible(G.f[t]->body, false);
+    if (por_f) fighter_free(por_f);
+    por_f = fighter_new(i, 0);
+    body_attach(por_f->body, sc);
+    t3_object_set_position(por_f->root, 0, 0, 0); por_f->yaw = 0; t3_object_set_rotation(por_f->root, 0, 0, 0);
+    body_teleport(por_f->body);
+    hide_meshes(&sc->base, por_f->root);
+    t3_object_traverse(por_f->root, no_cast, NULL);   /* no hair shadow across the face */
+    fighter_play(por_f, "Idle_Loop", 0, false, 1, 0.4f, true);
+    ck_log("[portrait] %d %s", i, ROSTER[i].key);
+  }
+  body_animate(por_f->body, k < 6 ? 1.f / 60 : 0);
+  t3_object *head = body_bone(por_f->body, BONE_HEAD);
+  t3_vec3 h = head ? t3_object_get_world_position(head) : t3_v3(0, 1.5f, 0);
+  /* the head bone is the skull's base: the face just above it, the shoulders in below. The
+   * middle 560 px of the frame (what the tool keeps) sees 0.42 d of height at fov 30 */
+  float a = -0.45f, d = 1.32f;   /* from the sun's side (arena.c: up, left, front) */
+  v3 look = {h.x, h.y - 0.02f, h.z};
+  t3_object_set_position(G.cam, look.x + sinf(a) * d, look.y + 0.08f, look.z + cosf(a) * d);
+  t3_object_look_at(G.cam, look.x, look.y, look.z);
+  if (fabsf(G.cam->fov - 30) > 0.01f) { G.cam->fov = 30; t3_camera_update_projection_matrix(G.cam); }
+  /* the sun from just over the camera's shoulder, so the cel bands fall at the face's edges, not across it */
+  t3_light *sun = find_sun(&sc->base);
+  if (sun) {
+    t3_object_set_position(sun, look.x + sinf(a - 0.25f) * 10, look.y + 2.5f, look.z + cosf(a - 0.25f) * 10);
+    t3_object_set_position(sun->target, look.x, look.y, look.z);
+  }
+  sc->has_background = true;
+  sc->background = k == 7 ? t3_color_hex(0xffffff) : t3_color_hex(0x000000);
+}
+#endif
+
+#ifdef CK_SHOWROOM
+/* test builds (-DCK_SHOWROOM -DCK_NOUI): fighter i in its four colours side by side under the
+ * select's light, frame i * 8 + 6 (for tuning roster.c's alternates) */
+static fighter *sr_f[ROSTER_COLOURS]; static int sr_n = -1;
+static void showroom_frame(void) {
+  int n = ++sr_n, i = n / 8, k = n % 8;
+  if (i >= ROSTER_N) return;
+  stage_menu_light(true);
+  if (k == 0) {
+    for (int t = 0; t < 2; t++) if (G.f[t]) body_visible(G.f[t]->body, false);
+    for (int c = 0; c < ROSTER_COLOURS; c++) {
+      if (sr_f[c]) fighter_free(sr_f[c]);
+      sr_f[c] = fighter_new(i, c);
+      body_attach(sr_f[c]->body, stage_scene());
+      t3_object_set_position(sr_f[c]->root, -2.4f + c * 1.6f, 0, 0); sr_f[c]->yaw = 0.35f; t3_object_set_rotation(sr_f[c]->root, 0, 0.35f, 0);
+      body_teleport(sr_f[c]->body);
+      fighter_play(sr_f[c], "Idle_Loop", 0, false, 1, 0.4f, true);
+    }
+    ck_log("[showroom] %d %s", i, ROSTER[i].key);
+  }
+  for (int c = 0; c < ROSTER_COLOURS; c++) body_animate(sr_f[c]->body, 1.f / 60);
+  t3_object_set_position(G.cam, 0, 1.0f, 5.2f); t3_object_look_at(G.cam, 0, 0.95f, 0);
+}
+#endif
 
 /* ---------------------------------------------------------------- main.c's entry points */
 
@@ -1205,8 +1357,8 @@ void game_init(void) {
   G.sel.stage = CK_STAGE;
 #endif
   fx_init(); gfx_init(); ui_init(); dance_init(); online_init();
-  ui_cb.act = act; ui_cb.weapon = cb_weapon; ui_cb.swap = cb_swap; ui_cb.diff = cb_diff;
-  ui_cb.fighter = cb_fighter; ui_cb.stage = cb_stage;
+  ui_cb.act = act; ui_cb.diff = cb_diff; ui_cb.stage = cb_stage;
+  ui_cb.pick = cb_pick; ui_cb.cheer = cb_cheer;
   sfx_tap = sfx_tapped;
   special_on_blow = special_blow;
   stage_init(CK_R);
@@ -1247,6 +1399,12 @@ bool game_boot(int stage) {
 }
 
 void game_frame(float dt) {
+#ifdef CK_PORTRAITS
+  (void)dt; portrait_frame(); return;
+#endif
+#ifdef CK_SHOWROOM
+  (void)dt; showroom_frame(); return;
+#endif
   /* keys: the UI's onKey, then the window handler, as the page registers them */
   pad_keys();
   /* the UI's listeners first (ui_frame reads the keys, the typed text and the
@@ -1254,7 +1412,7 @@ void game_frame(float dt) {
    * keys, as the page's inputs did */
   ui_frame(dt);
   const int *codes; int n = input_key_events(&codes);
-  if (!ui_online.focus) for (int i = 0; i < n; i++) app_key(codes[i]);
+  if (!ui_online.focus) for (int i = 0; i < n; i++) app_key(codes[i], ui_key_used(i));
   if (announce_clear_at > 0 && ck_now() >= announce_clear_at) { announce_clear_at = -1; gui_clear_announce(); }
 
   online_update(dt);
@@ -1266,6 +1424,9 @@ void game_frame(float dt) {
 }
 
 void game_draw(void) {
+#if defined(CK_PORTRAITS) || defined(CK_SHOWROOM)
+  if (G.arena_ready && G.phase != PH_LOAD) { render_scene(stage_scene(), G.cam); return; }
+#endif
   if (G.arena_ready && G.phase != PH_LOAD) {
     render_scene(stage_scene(), G.cam);
     stage_fx_frame(G.cam);

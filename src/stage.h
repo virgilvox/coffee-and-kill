@@ -61,6 +61,8 @@ void stage_fx_draw(void);
 void stage_fx_frame(t3_camera *cam);
 /* keep a camera at pos looking at look out of the walls */
 void stage_camera(v3 look, v3 *pos);
+/* the workshop lit for the fighter select (its sun in front), or as the page lights it */
+void stage_menu_light(bool on);
 /* whether the stage has shadow maps (else the page's fighters get a blob) */
 bool stage_shadows(void);
 

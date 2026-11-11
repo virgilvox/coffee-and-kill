@@ -29,8 +29,10 @@
 typedef enum { AM_B, AM_C, AM_D, AM_S, AM_F, AM_H, AM_M, AM_O, AM_P, AM_U, AM_K, AM_E, AM_V, AM_G, AM_W, AM_R, AM_A, AM_I, AM_J, AM_L, AM_N, AM_Q, AM_T, AM_X, AM_Y, AM_Z, AM_A2, AM_B2, AM_C2, AM_D2, AM_E2, AM_F2, AM_G2, AM_H2, AM_I2, AM_J2, AM_K2, AM_L2, AM_M2, AM_N2, AM_O2, AM_P2, AM_COUNT } actor_model;
 typedef enum { EX_BLINK, EX_A, EX_I, EX_U, EX_E, EX_O, EX_JOY, EX_ANGRY, EX_SORROW, EX_FUN, EX_COUNT } actor_expr;
 
-/* a palette swap: a hue turn (degrees) and saturation and value scales per part */
-typedef struct { float hue, sat, val; } actor_swatch;
+/* a palette swap: a hue turn (degrees) and saturation and value scales per part. With tint above
+ * zero the part is dyed instead: hue is the dye's (degrees) and tint the saturation it adds, so
+ * black, grey and white clothes take a colour too (a hue turn leaves them as they are) */
+typedef struct { float hue, sat, val, tint; } actor_swatch;
 typedef struct { actor_swatch hair, top, bottom, shoes; } actor_palette;
 extern const actor_palette ACTOR_PAL_NONE;
 

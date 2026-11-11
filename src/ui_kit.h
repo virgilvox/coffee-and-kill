@@ -43,6 +43,17 @@ extern btn_t back_b;        /* .btn.ghost.back at (20, 20) */
 void draw_back(void);
 extern bool kbd_nav;        /* the keyboard moved the focus (show the ring) */
 
+/* ui_select.c: the fighter select, and its grid as a modal for the tourney and online screens */
+void select_init(void);
+void select_show(void);
+void select_frame(float dt);
+void select_draw(void);
+void select_key(int code);
+void select_pointer(float x, float y, bool pressed);
+void select_modal_open(int fighter, void (*done)(int fighter));
+bool select_modal_active(void);
+void select_modal_close(void);
+
 /* ui_menus.c: the select, stage and tourney screens */
 void menus_init(void);
 bool menus_owns(const char *id);
@@ -50,5 +61,6 @@ void menus_show(const char *id);
 void menus_draw(void);
 void menus_key(int code);
 void menus_pointer(float x, float y, bool pressed);
+void menus_frame(float dt);
 
 #endif

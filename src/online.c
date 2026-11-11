@@ -293,6 +293,23 @@ static bool pads_poll(int A, intent_t *out) {
   for (int i = 0; i < 5; i++) if (P->c[i] > P->seen[i]) { *dst[i] = true; P->seen[i] = P->c[i]; }
   return true;
 }
+static struct { int dx, dy; } pnav[2];
+void online_pads_menu(bool menu) {
+  for (int t = 0; t < 2; t++) {
+    pad *P = &Z.p[t];
+    if (!pad_connected(t)) continue;
+    int pl = input_mode == 1 ? 0 : t;
+    int dx = P->mx < -0.5f ? -1 : P->mx > 0.5f ? 1 : 0, dy = P->my > 0.5f ? -1 : P->my < -0.5f ? 1 : 0;
+    if (menu && (dx != pnav[t].dx || dy != pnav[t].dy) && (dx || dy))
+      input_push_menu(pl, dy ? (dy < 0 ? ME_UP : ME_DOWN) : dx < 0 ? ME_LEFT : ME_RIGHT, DEV_PHONE);
+    pnav[t].dx = dx; pnav[t].dy = dy;
+    static const int EV[5] = {ME_OK, ME_NEXT, ME_BACK, ME_SWAP, ME_START};   /* l h k d s */
+    for (int i = 0; i < 5; i++) if (P->c[i] > P->seen[i]) {
+      if (menu) { input_push_menu(pl, EV[i], DEV_PHONE); P->seen[i] = P->c[i]; }
+      else input_note_dev(DEV_PHONE);
+    }
+  }
+}
 static void pad_status(void) {
   if (!Z.on) return;
   bool a = pad_connected(0), p = pad_connected(1);

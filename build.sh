@@ -83,6 +83,9 @@ cp "$ROOT"/assets/anim/*.bin "$OUT/assets/"
 for m in $(cat "$ROOT/tools/models.txt"); do cp "$ROOT/assets/models/$m.glb" "$OUT/assets/"; done
 # KEYHOLDER's bodies, stages and signs (tools/import-kh.mjs)
 cp "$ROOT"/assets/kh/* "$OUT/assets/"
+# the fighter select's portraits (tools/bake-portraits.mjs) and the stage select's stills (tools/bake-stills.mjs)
+for f in "$ROOT"/assets/portraits/*.png; do [ -f "$f" ] && cp "$f" "$OUT/assets/portrait_$(basename "$f")"; done
+for f in "$ROOT"/assets/stills/*.jpg; do [ -f "$f" ] && cp "$f" "$OUT/assets/still_$(basename "$f")"; done
 # the music and SFX, rendered from the page's own audio code (tools/audio_rebuild.sh)
 cp "$ROOT"/assets/music/* "$OUT/assets/"
 

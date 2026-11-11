@@ -15,7 +15,7 @@
 
 /* P.sel: the two fighter slots, the CPU level and the stage */
 typedef struct {
-  struct { char ch[12]; char weapon[12]; } slots[2];  /* roster and weapon keys (roster.h, weapons.h) */
+  struct { char ch[12]; char weapon[12]; int colour; } slots[2];  /* roster and weapon keys (roster.h, weapons.h), colour 0..3 */
   int level;                                          /* 0 ROOKIE, 1 JOURNEYMAN, 2 EXTREME */
   int stage;                                          /* stage.h index */
 } ck_sel;
@@ -30,6 +30,10 @@ typedef struct {
   void (*diff)(int level);
   void (*fighter)(int slot, const char *key);
   void (*stage)(int stage);
+  /* the fighter select: what slot shows changed (in ck_sel); now: load its body at once (a
+   * confirm), else once the cursor has rested on it */
+  void (*pick)(int slot, bool now);
+  void (*cheer)(int slot);                 /* the slot's fighter plays its victory clip once */
 } ui_callbacks;
 extern ui_callbacks ui_cb;
 
@@ -42,17 +46,22 @@ void ui_draw(void);               /* vignette, HUD, screens, flash */
 const char *ui_screen(void);
 void ui_show(const char *screen);
 void ui_hide_all(void);
-/* Rr.onKey: a keydown (WC_KEY_* / CK_KEY_* code), not a repeat */
-void ui_key(int code);
+/* Rr.onKey: a keydown (WC_KEY_* / CK_KEY_* code), not a repeat; true when the shown screen used it */
+bool ui_key(int code);
+/* whether the screen used this frame's key event i (input_key_events order) */
+bool ui_key_used(int i);
 /* the mouse: hover selects menu buttons, a click acts (the page's click and mouseover handlers) */
 void ui_pointer(float x, float y, bool pressed);
 
 void ui_set_select(ck_sel *sel, int mode);
+/* the select shown again from the stage select: the last step taken is undone, the rest kept */
+void ui_select_return(void);
+/* the screen up reads the pads by player itself (input.h menu events): the game pushes no keys */
+bool ui_reads_pads(void);
 /* the tourney the setup, bracket and champion screens show (tourney.h) */
 void ui_set_tourney(void *tourney);
 /* repaint whichever of this cart's menu screens is up (after the game changed what it shows) */
 void ui_menus_changed(void);
-void ui_render_select(void);
 void ui_set_names(const char *n0, const char *n1, const char *pn0, const char *pn1);  /* pn NULL: leave P1 / P2 */
 void ui_set_health(int i, float pct, bool instant);
 void ui_set_meter(int i, float pct);

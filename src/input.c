@@ -14,9 +14,13 @@ static wc_pad_t pcur[4], pprev[4];
 static int kev[64], nkev;
 static char text[64]; static int ntext;
 static ck_pointer ptr;
-static int navx[4], navy[4];         /* the menu stick's last direction, for edges */
-static int nav_ox[4], nav_oy[4];
+static int nav_ox[4], nav_oy[4];     /* the menu stick's last direction, for edges */
+static double nav_rep[4];            /* when a held direction repeats next */
 static bool jl[2][5];                /* Jl: each pad's last state of the five attack buttons */
+int input_last_dev = DEV_KEYS;
+static bool dev_seen;
+static menu_ev mev[48]; static int nmev;
+static double back_t0 = -1;
 
 #define DOWN(k, c) (((k)[(c) >> 3] >> ((c) & 7)) & 1)
 
@@ -42,25 +46,58 @@ void input_frame(const wc_pad_t *pads, const uint8_t *keys, const wc_pointer_t *
     if (ch && ntext < 63) text[ntext++] = ch;
   }
   text[ntext] = 0;
-  /* the menu stick: left stick or d-pad, with an edge per direction */
+  if (nkev) input_last_dev = DEV_KEYS;
+  /* a pad that reports itself at boot is the device until something else is used (the station) */
+  if (!dev_seen) { dev_seen = true; for (int i = 0; i < 4; i++) if (pcur[i].connected) input_last_dev = DEV_PAD; }
+  /* the pads' menu events. Every pad is read, connected or not: the station's core reports only
+   * port 0 as connected, and a pad that is not there reads all zeros. */
+  nmev = 0;
+  double now = ck_now();
   for (int i = 0; i < 4; i++) {
     const wc_pad_t *q = &pcur[i];
+    int pl = input_mode == 1 ? 0 : i & 1;
     int dx = 0, dy = 0;
     if (q->buttons & WC_BTN_LEFT) dx = -1; else if (q->buttons & WC_BTN_RIGHT) dx = 1;
     else if (q->left_x < -16000) dx = -1; else if (q->left_x > 16000) dx = 1;
     if (q->buttons & WC_BTN_UP) dy = -1; else if (q->buttons & WC_BTN_DOWN) dy = 1;
     else if (q->left_y < -16000) dy = -1; else if (q->left_y > 16000) dy = 1;
-    navx[i] = dx != nav_ox[i] ? dx : 0; navy[i] = dy != nav_oy[i] ? dy : 0;
+    bool fire = false;
+    if (dx != nav_ox[i] || dy != nav_oy[i]) { fire = dx || dy; nav_rep[i] = now + 0.38; }
+    else if ((dx || dy) && now >= nav_rep[i]) { fire = true; nav_rep[i] = now + 0.11; }
     nav_ox[i] = dx; nav_oy[i] = dy;
+    if (fire) {
+      if (dy) input_push_menu(pl, dy < 0 ? ME_UP : ME_DOWN, DEV_PAD);
+      else input_push_menu(pl, dx < 0 ? ME_LEFT : ME_RIGHT, DEV_PAD);
+    }
+    static const struct { uint32_t b; int ev; } MAP[] = {{WC_BTN_A, ME_OK}, {WC_BTN_B, ME_BACK}, {WC_BTN_Y, ME_SWAP},
+      {WC_BTN_L, ME_PREV}, {WC_BTN_R, ME_NEXT}, {WC_BTN_START, ME_START}};
+    for (int k = 0; k < (int)(sizeof MAP / sizeof MAP[0]); k++)
+      if ((q->buttons & MAP[k].b) && !(pprev[i].buttons & MAP[k].b)) input_push_menu(pl, MAP[k].ev, DEV_PAD);
+    if (q->buttons & ~pprev[i].buttons) input_last_dev = DEV_PAD;
   }
+  /* the back button held (B on a pad, Escape): the select's hold to leave */
+  bool bk = DOWN(kcur, WC_KEY_ESCAPE);
+  for (int i = 0; i < 4; i++) bk |= (pcur[i].buttons & WC_BTN_B) != 0;
+  if (!bk) back_t0 = -1; else if (back_t0 < 0) back_t0 = now;
   if (p && p[0].active) {
-    bool d = p[0].buttons & 1;
+    bool d = p[0].buttons & 1, r = (p[0].buttons & 2) != 0;
+    ptr.moved = ptr.active && (ptr.x != p[0].x || ptr.y != p[0].y);
     ptr.pressed = d && !ptr.down; ptr.released = !d && ptr.down;
+    ptr.rpressed = r && !ptr.rdown; ptr.rdown = r;
     ptr.down = d; ptr.active = true; ptr.x = p[0].x; ptr.y = p[0].y;
-  } else { ptr.pressed = ptr.released = false; ptr.down = false; }
+    if (ptr.moved || ptr.pressed || ptr.rpressed) input_last_dev = DEV_MOUSE;
+  } else { ptr.pressed = ptr.released = ptr.rpressed = ptr.moved = false; ptr.down = ptr.rdown = false; ptr.active = false; }
 }
 
-void input_end_frame(void) { nkev = 0; }
+void input_note_dev(int dev) { input_last_dev = dev; }
+void input_push_menu(int player, int ev, int dev) {
+  if (nmev < (int)(sizeof mev / sizeof mev[0])) mev[nmev++] = (menu_ev){player, ev, dev};
+  input_last_dev = dev;
+}
+int input_menu_events(const menu_ev **e) { *e = mev; return nmev; }
+float input_back_held(void) { return back_t0 < 0 ? 0 : (float)(ck_now() - back_t0); }
+
+void input_end_frame(void) { nkev = 0; nmev = 0; }
 int input_key_events(const int **codes) { *codes = kev; return nkev; }
 void input_push_key(int code) { if (nkev < 64) kev[nkev++] = code; }
 int input_text(const char **s) { *s = text; return ntext; }
@@ -70,7 +107,6 @@ bool input_any_key(void) { return nkev > 0; }
 bool input_pad_pressed(int pad, uint32_t b) { return pad >= 0 && pad < 4 && (pcur[pad].buttons & b) && !(pprev[pad].buttons & b); }
 bool input_pad_down(int pad, uint32_t b) { return pad >= 0 && pad < 4 && (pcur[pad].buttons & b); }
 bool input_pad_connected(int pad) { return pad >= 0 && pad < 4 && pcur[pad].connected; }
-void input_pad_nav(int pad, int *dx, int *dy) { *dx = navx[pad]; *dy = navy[pad]; }
 const ck_pointer *input_pointer(void) { return &ptr; }
 
 /* the key maps, KeyboardEvent.code -> HID */
@@ -101,7 +137,7 @@ intent_t input_poll(int s) {
   if (input_mode != 1) list[0] = s;
   for (int k = 0; k < nl; k++) {
     int i = list[k];
-    if (i < 0 || i > 3 || !pcur[i].connected) continue;
+    if (i < 0 || i > 3) continue;   /* connected or not: see the menu events above */
     const wc_pad_t *n = &pcur[i];
     float r = n->left_x / 32767.f, v = n->left_y / 32767.f, o = 0.25f;
     if (fabsf(r) > o) P.mx = fabsf(r) > fabsf(P.mx) ? ck_sign(r) * fminf(1, (fabsf(r) - o) / (1 - o) + 0.2f) : P.mx;

@@ -16,13 +16,20 @@
 
 enum { BODY_PAGE, BODY_KH };
 
-typedef struct { float hue, sat, val; } roster_swatch;   /* a KEYHOLDER palette swap (actor_palette) */
+/* one part's colour in an alternate (roster_entry.alts). A KEYHOLDER body takes it as its palette
+ * swap (actor_palette): a hue turn in degrees and scales of saturation and value, per part, or with
+ * tint set a dye of that hue (for black, grey and white clothes, which a turn leaves alone). A page
+ * body is one scanned texture, so it is tinted by tone instead: [0] tints its dark clothes (and
+ * hair) and [1] its light clothes, each to the hue (degrees) and saturation given, with value
+ * scaled by val. An entry of zeros changes nothing. */
+typedef struct { float hue, sat, val, tint; } roster_swatch;
+#define ROSTER_COLOURS 4                  /* colour 0, the body's own, and the three alternates */
 
 typedef struct {
   const char *key;            /* the wire and the save ("moheeb", "vee"): never change one */
   const char *name;           /* "MOHEEB" */
   const char *title;          /* a few words under the name */
-  const char *bio;            /* the select card's line */
+  const char *bio;            /* the select screen's line (two lines at most) */
   uint32_t color;             /* the fighter's accent */
   const char *weapon;         /* default weapon key (weapons.h) */
   const char *win_clip;       /* the victory clip (NULL: Celebration) */
@@ -33,8 +40,8 @@ typedef struct {
   float grip[3];              /* the hand's grip axis (the page's kl) */
   /* BODY_KH */
   const char *body;           /* KEYHOLDER's body letter(s): "C", "E2" (src/kh/actor.h AM_*) */
-  roster_swatch pal[4];       /* hair, top, bottom, shoes; zero entries mean no change */
   /* both */
+  roster_swatch alts[ROSTER_COLOURS - 1][4];   /* colours 1 to 3: hair, top, bottom, shoes (a page body: dark, light) */
   float scale;                /* the model's scale (1 = its own size) */
 } roster_entry;
 

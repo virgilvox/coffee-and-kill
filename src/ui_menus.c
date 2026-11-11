@@ -24,7 +24,6 @@
 static tourney_t *TT;
 void ui_set_tourney(void *t) { TT = (tourney_t *)t; }
 
-static const char *LEVELS[3] = {"ROOKIE", "JOURNEYMAN", "EXTREME"};
 static void act(const char *a) { sfx_ui_ok(); if (ui_cb.act) ui_cb.act(a); }
 static uint32_t slot_col(int g) { return g ? C_CYAN : C_PINK; }
 
@@ -45,174 +44,12 @@ static float fit_fs(const char *s, float fs, float w, float min) {
   while (fs > min && t_width(F_MARKER, fs, 0, s) > w) fs -= 1;
   return fs;
 }
-/* a short tag for a roster tile: initials of two words, else the first two letters */
-static void initials(const char *name, char out[4]) {
-  const char *sp = strchr(name, ' ');
-  out[0] = name[0];
-  out[1] = sp && sp[1] ? sp[1] : name[1];
-  out[2] = 0;
-}
 /* a small arrow: left (-1) or right (+1), centred on (x, y) */
 static void arrow(cv *c, float x, float y, int dir, col_t col) {
   cv_begin(c);
   cv_move(c, x - 5 * dir, y - 8); cv_line(c, x + 6 * dir, y); cv_line(c, x - 5 * dir, y + 8);
   cv_close(c);
   cv_fill_hex(c, col.rgb, col.a); cv_fill(c);
-}
-
-/* ================================================================== the fighter select */
-static rlayer sel_R;
-static int sel_rows(const char **rows) {
-  int n = 0;
-  rows[n++] = "f0"; rows[n++] = "w0"; rows[n++] = "f1"; rows[n++] = "w1";
-  if (scr_mode == 1) rows[n++] = "diff";
-  rows[n++] = "start";
-  return n;
-}
-
-static float card_paint(cv *c, int g, float cx, float cy, float cardH, const char *focus, bool paint) {
-  const char *key = scr_sel->slots[g].ch;
-  int ri = roster_index(key); if (ri < 0) ri = g;
-  const roster_entry *e = roster_get(ri);
-  int wi = weapon_index(scr_sel->slots[g].weapon); if (wi < 0) wi = 0;
-  const weapon_def *W = &WEAPONS[wi];
-  float ix = cx + 20, iy = cy + 18, IW = 511;
-  bool kf = focus[0] == 'f' && focus[1] - '0' == g, kw = focus[0] == 'w' && focus[1] - '0' == g;
-  /* the text that sizes the card */
-  char bio[3][160]; char line[220]; snprintf(line, sizeof line, "%s. %s", e->title, e->bio);
-  int nb = t_wrap(F_TYPE, 13, 0, line, IW, false, bio, 3);
-  char dl[3][160]; int nd = t_wrap(F_TYPE, 13, 0, W->desc, IW, false, dl, 3);
-  float y_bio = iy + 43.52f + 8, y_ros = y_bio + nb * 17.55f + 8, y_wp = y_ros + 30 + 10, y_de = y_wp + 2 * 56 + 8 + 9;
-  float h = (y_de + nd * 17.55f + 6 + 14 + 16 + 4) - cy;
-  if (!paint) return h;
-  c_box(c, cx, cy, 551, cardH, COL(C_CREAM), 4, COL(C_INK), 8, 8, COL(slot_col(g)));
-  if (kf || kw) c_dash_rect(c, cx - 9, cy - 9, 551 + 18, cardH + 18, 4, COL(C_PINK));
-  /* .who: P1 / P2 / CPU and the name */
-  char pl[8]; if (scr_mode == 1 && g == 1) strcpy(pl, "CPU"); else snprintf(pl, sizeof pl, "P%d", g + 1);
-  float plw = t_width(F_LCD, 24, 0, pl) + 16;
-  c_rect(c, ix, iy + 6.26f, plw, 31, COL(C_INK));
-  t_draw(c, F_LCD, 24, 0, ix + 8, iy + 6.26f + t_asc(F_LCD, 24), pl, COL(C_CREAM));
-  float room = IW - plw - 10 - (g == 0 ? 190 : 0);
-  float fs = fit_fs(e->name, 43.52f, room, 24);
-  t_draw(c, F_MARKER, fs, 0, ix + plw + 10, t_base(F_MARKER, fs, iy, 43.52f), e->name, COL(C_INK));
-  if (g == 0) {
-    const char *sw = "SWAP SIDES (TAB)";
-    float sww = t_width(F_TYPE, 13, 1.82f, sw) + 18 + 6;
-    float sx = ix + IW - sww, sy = iy + 5.26f;
-    c_box(c, sx, sy, sww, 33, COL(C_INK), 3, COL(C_INK), 0, 0, COL(0));
-    t_draw(c, F_TYPE, 13, 1.82f, sx + 12, sy + 8 + t_asc(F_TYPE, 13), sw, COL(C_CREAM));
-    hit_add(sx, sy, sww, 33, H_SWAP, 0, 0, NULL);
-  }
-  for (int k = 0; k < nb; k++) t_draw(c, F_TYPE, 13, 0, ix, t_base(F_TYPE, 13, y_bio + k * 17.55f, 17.55f), bio[k], COLA(C_INK, 0.85f));
-  /* the roster strip: every fighter, the picked one lifted in the slot's colour */
-  float tw = (IW - 22 - (ROSTER_N - 1) * 3) / ROSTER_N, tx0 = ix + 11;
-  arrow(c, ix + 4, y_ros + 15, -1, COLA(C_INK, kf ? 1 : 0.35f));
-  arrow(c, ix + IW - 4, y_ros + 15, 1, COLA(C_INK, kf ? 1 : 0.35f));
-  for (int k = 0; k < ROSTER_N; k++) {
-    float bx = tx0 + k * (tw + 3), by = y_ros;
-    bool on = k == ri;
-    if (on) { bx -= 2; by -= 2; c_rect(c, bx + 3, by + 3, tw, 30, COL(C_INK)); }
-    c_rect(c, bx, by, tw, 30, on ? COL(slot_col(g)) : COL(C_PAPER));
-    c_rect(c, bx, by + 26, tw, 4, COL(ROSTER[k].color));
-    c_border(c, bx, by, tw, 30, 2, COL(C_INK));
-    char in[4]; initials(ROSTER[k].name, in);
-    float iw = t_width(F_MARKER, 13, 0, in);
-    t_draw(c, F_MARKER, 13, 0, bx + (tw - iw) / 2, by + 6 + t_asc(F_MARKER, 13), in, COL(C_INK));
-    hit_add(tx0 + k * (tw + 3), y_ros, tw, 30, H_FIGHTER, g, k, NULL);
-  }
-  /* the rack: two rows of five */
-  float ww = (IW - 4 * 8) / 5;
-  for (int w = 0; w < WEAPON_N; w++) {
-    float bx = ix + (w % 5) * (ww + 8), by = y_wp + (w / 5) * 64;
-    bool o = w == wi;
-    if (o) { bx -= 2; by -= 2; c_rect(c, bx + 4, by + 4, ww, 56, COL(C_INK)); }
-    c_rect(c, bx, by, ww, 56, o ? COL(slot_col(g)) : COL(C_PAPER));
-    c_border(c, bx, by, ww, 56, 3, COL(C_INK));
-    hit_add(ix + (w % 5) * (ww + 8), y_wp + (w / 5) * 64, ww, 56, H_WEAPON, g, w, NULL);
-    char wl[3][160]; int nl = t_wrap(F_MARKER, 13, 0, WEAPONS[w].name, ww - 16, false, wl, 2);
-    for (int k = 0; k < nl; k++) t_draw(c, F_MARKER, 13, 0, bx + 8, t_base(F_MARKER, 13, by + 6 + k * 14, 14), wl[k], COL(C_INK));
-    t_draw(c, F_TYPE, 9.5f, 1.2f, bx + 8, by + 41 + t_asc(F_TYPE, 9.5f), WEAPONS[w].tag, COLA(C_INK, 0.8f));
-  }
-  /* the weapon's line, its numbers and its EXTREME */
-  for (int k = 0; k < nd; k++) t_draw(c, F_TYPE, 13, 0, ix, t_base(F_TYPE, 13, y_de + k * 17.55f, 17.55f), dl[k], COL(C_INK));
-  float sy = y_de + nd * 17.55f + 6, sx = ix;
-  for (int k = 0; k < 2; k++) {
-    const char *lab = k ? "SPD" : "DMG";
-    t_draw(c, F_TYPE, 11, 1.1f, sx, sy + t_asc(F_TYPE, 11), lab, COL(C_INK));
-    float v = k ? W->spd / 1.45f : W->dmg / 1.55f;
-    float bx = sx + t_width(F_TYPE, 11, 1.1f, lab) + 6;
-    c_rect(c, bx, sy + 3, 60, 7, COLA(C_INK, 0.15f));
-    c_rect(c, bx, sy + 3, roundf(fminf(1, v) * 60), 7, COL(C_INK));
-    sx = bx + 74;
-  }
-  char ex[64]; snprintf(ex, sizeof ex, "EXTREME: %s", special_name(W->special));
-  t_draw(c, F_TYPE, 11, 1.1f, sx + 6, sy + t_asc(F_TYPE, 11), ex, COL(C_INK));
-  return h;
-}
-
-static void select_paint(void) {
-  nhits = 0;
-  if (!scr_sel) return;
-  const char *rows[8]; int nr = sel_rows(rows);
-  if (scr_sel_focus >= nr) scr_sel_focus = nr - 1;
-  const char *focus = rows[scr_sel_focus];
-  float cardH = fmaxf(card_paint(NULL, 0, 0, 0, 0, focus, false), card_paint(NULL, 1, 0, 0, 0, focus, false));
-  float panelH = cardH + 18 + 64;
-  float top = CK_H - 18 - panelH, px = 80;
-  int ry0 = (int)floorf(top) - 12;
-  R_begin(&sel_R, 64, ry0, 1160, CK_H - ry0);
-  cv *c = sel_R.L.c;
-  for (int g = 0; g < 2; g++) card_paint(c, g, px + g * (551 + 18), top, cardH, focus, true);
-  /* .selrow: the difficulty (or the two player note) and on to the stage */
-  float ry = top + cardH + 18;
-  bool kfd = !strcmp(focus, "diff");
-  c_box(c, px, ry, 746, 64, COL(C_CREAM), 4, COL(C_INK), 8, 8, COL(C_PINK));
-  if (kfd) c_dash_rect(c, px - 9, ry - 9, 746 + 18, 64 + 18, 4, COL(C_PINK));
-  if (scr_mode == 1) {
-    lab_paint(c, px + 20, ry + 23.5f, "DIFFICULTY");
-    float cx = px + 20 + t_width(F_TYPE, 13, 2.6f, "DIFFICULTY") + 12;
-    for (int i = 0; i < 3; i++) {
-      chip_paint(c, cx, ry + 15, LEVELS[i], scr_sel->level == i);
-      hit_add(cx, ry + 15, chip_w(LEVELS[i]), 34, H_DIFF, i, 0, NULL);
-      cx += chip_w(LEVELS[i]) + 8;
-    }
-  } else lab_paint(c, px + 20, ry + 23.5f, "TWO PLAYERS ON ONE KEYBOARD. GAMEPADS WORK TOO.");
-  btn_t go; btn_init(&go, px + 746 + 14, ry, 360, 64, 38.4f, 22, 8, BTN_GO, "PICK STAGE", "stage");
-  btn_paint_at(c, &go, !strcmp(focus, "start") ? 1 : 0, 0, 0);
-  hit_add(go.x, go.y, 360, 64, H_ACT, 0, 0, "stage");
-}
-void scr_select_changed(void) { if (scr_cur && !strcmp(scr_cur, "s-select")) select_paint(); }
-
-static void cycle_fighter(int g, int d) {
-  int ri = roster_index(scr_sel->slots[g].ch); if (ri < 0) ri = 0;
-  ri = (ri + d + ROSTER_N) % ROSTER_N;
-  if (ui_cb.fighter) ui_cb.fighter(g, ROSTER[ri].key);
-}
-static void cycle_weapon(int g, int d) {
-  int w = weapon_index(scr_sel->slots[g].weapon); if (w < 0) w = 0;
-  w = (w + d + WEAPON_N) % WEAPON_N;
-  if (ui_cb.weapon) ui_cb.weapon(g, WEAPONS[w].key);
-}
-
-static void select_key(int e) {
-  const char *D[8]; int nr = sel_rows(D);
-  const char *g = D[scr_sel_focus < nr ? scr_sel_focus : nr - 1];
-  if (e == WC_KEY_UP) { scr_sel_focus = (scr_sel_focus + nr - 1) % nr; sfx_ui(); }
-  else if (e == WC_KEY_DOWN) { scr_sel_focus = (scr_sel_focus + 1) % nr; sfx_ui(); }
-  else if (e == WC_KEY_LEFT || e == WC_KEY_RIGHT) {
-    int d = e == WC_KEY_RIGHT ? 1 : -1;
-    if (g[0] == 'f') cycle_fighter(g[1] - '0', d);
-    else if (g[0] == 'w') cycle_weapon(g[1] - '0', d);
-    else if (!strcmp(g, "diff")) { if (ui_cb.diff) ui_cb.diff((scr_sel->level + d + 3) % 3); }
-    else return;
-    sfx_ui();
-  } else if (e == WC_KEY_TAB) { if (ui_cb.swap) ui_cb.swap(); sfx_ui(); }
-  else if (e == WC_KEY_ENTER || e == WC_KEY_KP_ENTER) {
-    if (!strcmp(g, "start")) { act("stage"); return; }
-    scr_sel_focus = nr - 1;
-  } else if (e == WC_KEY_ESCAPE) { if (ui_cb.act) ui_cb.act("back"); return; }
-  else return;
-  select_paint();
 }
 
 /* ================================================================== the stage select */
@@ -554,6 +391,7 @@ static void champ_paint(void) {
 
 /* ================================================================== the module */
 void menus_init(void) {
+  select_init();
   head_paint(&HD_SEL, "PICK YOUR POISON");
   head_paint(&HD_STAGE, "PICK THE STAGE");
   head_paint(&HD_TOURNEY, "TOURNEY");
@@ -564,15 +402,14 @@ bool menus_owns(const char *id) {
 static void repaint(void) {
   const char *s = scr_cur;
   if (!menus_owns(s)) return;
-  if (!strcmp(s, "s-select")) select_paint();
-  else if (!strcmp(s, "s-stage")) stage_paint();
+  if (!strcmp(s, "s-stage")) stage_paint();
   else if (!strcmp(s, "s-tsetup")) tsetup_paint();
   else if (!strcmp(s, "s-bracket")) bracket_paint();
   else if (!strcmp(s, "s-champ")) champ_paint();
 }
 void ui_menus_changed(void) { repaint(); }
 void menus_show(const char *id) {
-  if (!strcmp(id, "s-select")) { const char *r[8]; scr_sel_focus = sel_rows(r) - 1; }
+  if (!strcmp(id, "s-select")) select_show();
   if (!strcmp(id, "s-stage")) st_focus = 0;
   if (!strcmp(id, "s-tsetup")) { ts_focus = TT ? ts_rows() - 1 : 0; ts_btn = 1; }
   if (!strcmp(id, "s-bracket")) br_btn = 0;
@@ -581,7 +418,7 @@ void menus_show(const char *id) {
 }
 void menus_draw(void) {
   const char *s = scr_cur;
-  if (!strcmp(s, "s-select")) { draw_shade_v(); draw_back(); head_draw(&HD_SEL); R_draw(&sel_R); return; }
+  if (!strcmp(s, "s-select")) { draw_shade_v(); draw_back(); head_draw(&HD_SEL); select_draw(); return; }
   if (!strcmp(s, "s-stage")) { draw_shade_v(); draw_back(); head_draw(&HD_STAGE); R_draw(&st_R); return; }
   if (!strcmp(s, "s-tsetup")) { ov_fill(0, 0, CK_W, CK_H, 0x0a0a0a, 0.62f); draw_back(); head_draw(&HD_TOURNEY); R_draw(&ts_R); return; }
   if (!strcmp(s, "s-bracket")) { ov_fill(0, 0, CK_W, CK_H, 0x0a0a0a, 0.62f); head_draw(&HD_TOURNEY); R_draw(&br_R); return; }
@@ -606,10 +443,6 @@ static void click(const hit_t *h) {
     case H_ACT:
       if (!strcmp(s, "s-tsetup")) tsetup_act(h->s); else act(h->s);
       return;
-    case H_FIGHTER: if (ui_cb.fighter) ui_cb.fighter(h->a, ROSTER[h->b].key); sfx_ui(); break;
-    case H_WEAPON: if (ui_cb.weapon) ui_cb.weapon(h->a, WEAPONS[h->b].key); sfx_ui(); break;
-    case H_SWAP: if (ui_cb.swap) ui_cb.swap(); sfx_ui(); break;
-    case H_DIFF: if (ui_cb.diff) ui_cb.diff(h->a); sfx_ui(); break;
     case H_STAGE: if (h->a >= 100) stage_pick(h->a - 100, true); else stage_pick(h->a, false); st_focus = 0; break;
     case H_TSIZE: tourney_set_size(TT, h->a); sfx_ui(); break;
     case H_TSTAGE: TT->stage += h->a; if (TT->stage < -1) TT->stage = STAGE_N - 1; if (TT->stage >= STAGE_N) TT->stage = -1; sfx_ui(); break;
@@ -619,15 +452,21 @@ static void click(const hit_t *h) {
   }
   repaint();
 }
+bool ui_reads_pads(void) { return select_modal_active() || (scr_cur && !strcmp(scr_cur, "s-select")); }
+void menus_frame(float dt) {
+  const char *s = scr_cur;
+  if (s && !strcmp(s, "s-select")) select_frame(dt);
+}
 void menus_pointer(float x, float y, bool pressed) {
   const char *s = scr_cur;
+  if (!strcmp(s, "s-select")) { select_pointer(x, y, pressed); return; }
   if (!strcmp(s, "s-champ")) {
     for (int i = 0; i < 2; i++) if (btn_hit(&ch_b[i], x, y) && i != ch_idx) { ch_idx = i; for (int k = 0; k < 2; k++) btn_set_sel(&ch_b[k], k == ch_idx); }
     if (pressed) for (int i = 0; i < 2; i++) if (btn_hit(&ch_b[i], x, y)) { act(ch_b[i].act); return; }
     return;
   }
   if (!pressed) return;
-  if ((!strcmp(s, "s-select") || !strcmp(s, "s-stage") || !strcmp(s, "s-tsetup")) && btn_hit(&back_b, x, y)) {
+  if ((!strcmp(s, "s-stage") || !strcmp(s, "s-tsetup")) && btn_hit(&back_b, x, y)) {
     act(!strcmp(s, "s-stage") ? "stageback" : "back"); return;
   }
   for (int i = 0; i < nhits; i++) if (x >= hits[i].x && x < hits[i].x + hits[i].w && y >= hits[i].y && y < hits[i].y + hits[i].h) { hit_t h = hits[i]; click(&h); return; }

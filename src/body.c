@@ -9,7 +9,7 @@
 #include <math.h>
 
 struct body {
-  int ri;
+  int ri, colour;
   const roster_entry *e;
   t3_object *root;                /* the page body: a group holding the scaled model; KEYHOLDER: the actor's root */
   t3_object *bone[BONE_N], *grip[2];
@@ -77,24 +77,73 @@ static t3_mesh *blob_new(void) {
   return m;
 }
 
+/* a KEYHOLDER body's palette in colour c (roster.h alts) */
+static actor_palette kh_palette(const roster_entry *e, int c) {
+  actor_palette pal = ACTOR_PAL_NONE;
+  if (c < 1 || c >= ROSTER_COLOURS) return pal;
+  actor_swatch *sw[4] = {&pal.hair, &pal.top, &pal.bottom, &pal.shoes};
+  for (int i = 0; i < 4; i++) {
+    const roster_swatch *r = &e->alts[c - 1][i];
+    if (r->hue || r->sat || r->val || r->tint) { sw[i]->hue = r->hue; sw[i]->sat = r->sat ? r->sat : 1; sw[i]->val = r->val ? r->val : 1; sw[i]->tint = r->tint; }
+  }
+  return pal;
+}
+
+/* a page body in colour c: its scanned texture tinted by tone (roster.h). Neutral pixels (low
+ * saturation, so not skin) take the dark tint below mid grey and the light tint above it, with
+ * soft edges so the scan's shading carries over. */
+static float smooth(float a, float b, float x) { float t = ck_clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
+static void hsv_rgb(float h, float s, float v, float *o) {
+  h = fmodf(h / 60.f + 12, 6);
+  float c = v * s, x = c * (1 - fabsf(fmodf(h, 2) - 1)), m = v - c;
+  int k = (int)h;
+  o[0] = (k == 0 || k == 5 ? c : k == 1 || k == 4 ? x : 0) + m;
+  o[1] = (k == 1 || k == 2 ? c : k == 0 || k == 3 ? x : 0) + m;
+  o[2] = (k == 3 || k == 4 ? c : k == 2 || k == 5 ? x : 0) + m;
+}
+static void page_tint(t3_texture *T, const roster_swatch *dark, const roster_swatch *light) {
+  if (!T || !T->pixels || T->type != T3_UNSIGNED_BYTE_TYPE) return;
+  bool hd = dark->hue || dark->sat || dark->val, hl = light->hue || light->sat || light->val;
+  if (!hd && !hl) return;
+  size_t n = (size_t)T->width * T->height;
+  for (size_t i = 0; i < n; i++) {
+    uint8_t *p = T->pixels + i * 4;
+    float r = p[0] / 255.f, g = p[1] / 255.f, b = p[2] / 255.f;
+    float mx = fmaxf(r, fmaxf(g, b)), mn = fminf(r, fminf(g, b)), v = mx, s = mx > 0 ? (mx - mn) / mx : 0;
+    float wn = 1 - smooth(0.12f, 0.32f, s);
+    if (wn <= 0) continue;
+    float wd = hd ? wn * (1 - smooth(0.30f, 0.50f, v)) : 0, wl = hl ? wn * smooth(0.50f, 0.70f, v) : 0;
+    const roster_swatch *t = wd >= wl ? dark : light; float w = fmaxf(wd, wl);
+    if (w <= 0) continue;
+    float o[3]; hsv_rgb(t->hue, t->sat, fminf(1, v * (t->val ? t->val : 1)), o);
+    p[0] = (uint8_t)(ck_lerp(r, o[0], w) * 255 + .5f); p[1] = (uint8_t)(ck_lerp(g, o[1], w) * 255 + .5f); p[2] = (uint8_t)(ck_lerp(b, o[2], w) * 255 + .5f);
+  }
+  T->version++;
+}
+static void tint_meshes(t3_object *o, void *ctx) {
+  const roster_swatch *sw = ctx;
+  if (o->type != T3_MESH && o->type != T3_SKINNED_MESH) return;
+  t3_mesh *m = (t3_mesh *)o;
+  for (int i = 0; i < m->material_count; i++) if (m->materials[i] && m->materials[i]->map) page_tint(m->materials[i]->map, &sw[0], &sw[1]);
+}
+
 static int kh_model(const char *letter) {
   int m = actor_model_find(letter);
   if (m < 0) { ck_log("body: no KEYHOLDER body %s", letter); m = AM_B; }
   return m;
 }
 
-body *body_new(int ri) {
+body *body_new(int ri, int colour) {
   body *b = calloc(1, sizeof *b);
   b->ri = ri; b->e = roster_get(ri);
+  b->colour = colour >= 0 && colour < ROSTER_COLOURS ? colour : 0;
   const roster_entry *e = b->e;
   if (e->kind == BODY_KH) {
-    actor_palette pal = ACTOR_PAL_NONE;
-    actor_swatch *sw[4] = {&pal.hair, &pal.top, &pal.bottom, &pal.shoes};
-    for (int i = 0; i < 4; i++) if (e->pal[i].sat > 0 || e->pal[i].val > 0) { sw[i]->hue = e->pal[i].hue; sw[i]->sat = e->pal[i].sat; sw[i]->val = e->pal[i].val; }
+    actor_palette pal = kh_palette(e, b->colour);
     b->actor = actor_new((actor_model)kh_model(e->body), &pal, e->scale, NULL);
     b->root = actor_root(b->actor);
     b->mixer = actor_mixer(b->actor);
-    static const char *BN[BONE_N] = {"hips", "rightHand", "leftHand", "rightFoot", "rightToes"};
+    static const char *BN[BONE_N] = {"hips", "rightHand", "leftHand", "rightFoot", "rightToes", "head"};
     for (int i = 0; i < BONE_N; i++) b->bone[i] = actor_bone(b->actor, BN[i]);
     /* KEYHOLDER's hold_place: +y out of the thumb side of the fist, +z along the knuckles */
     for (int h = 0; h < 2; h++) {
@@ -119,7 +168,8 @@ body *body_new(int ri) {
   mixer_init(&b->own, page_rig(e->rig), model);
   b->mixer = &b->own;
   t3_object_traverse(model, mesh_setup, NULL);
-  static const char *BN[BONE_N] = {"Hips", "RightHand", "LeftHand", "RightFoot", "RightToeBase"};
+  if (b->colour) t3_object_traverse(model, tint_meshes, (void *)e->alts[b->colour - 1]);
+  static const char *BN[BONE_N] = {"Hips", "RightHand", "LeftHand", "RightFoot", "RightToeBase", "Head"};
   for (int i = 0; i < BONE_N; i++) b->bone[i] = t3_object_get_by_name(model, BN[i]);
   /* kl: the grip axis of the rig's hand; the left hand mirrors it */
   for (int h = 0; h < 2; h++) {
@@ -161,6 +211,16 @@ void body_attach(body *b, t3_scene *scene) {
 }
 
 int body_roster(const body *b) { return b->ri; }
+int body_colour(const body *b) { return b->colour; }
+bool body_set_colour(body *b, int c) {
+  if (c < 0 || c >= ROSTER_COLOURS) c = 0;
+  if (c == b->colour) return true;
+  if (!b->actor) return false;   /* a page body is tinted as it loads */
+  actor_palette pal = kh_palette(b->e, c);
+  actor_repalette(b->actor, &pal);
+  b->colour = c;
+  return true;
+}
 t3_object *body_root(body *b) { return b->root; }
 ck_mixer *body_mixer(body *b) { return b->mixer; }
 const ck_rig *body_rig(const body *b) { return b->mixer ? b->mixer->rig : NULL; }

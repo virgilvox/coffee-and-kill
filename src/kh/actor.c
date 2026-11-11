@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-const actor_palette ACTOR_PAL_NONE = {{0, 1, 1}, {0, 1, 1}, {0, 1, 1}, {0, 1, 1}};
+const actor_palette ACTOR_PAL_NONE = {{0, 1, 1, 0}, {0, 1, 1, 0}, {0, 1, 1, 0}, {0, 1, 1, 0}};
 
 #define MAX_JOINTS 96
 #define MAX_COLLIDERS 24
@@ -111,7 +111,9 @@ static void hsv_turn(uint8_t *px, const actor_swatch *s) {
   float mx = fmaxf(r, fmaxf(g, b)), mn = fminf(r, fminf(g, b)), d = mx - mn, h = 0;
   if (d > 1e-4f) { if (mx == r) h = fmodf((g - b) / d + 6, 6); else if (mx == g) h = (b - r) / d + 2; else h = (r - g) / d + 4; }
   float sat = mx > 0 ? d / mx : 0, v = mx;
-  h = fmodf(h + s->hue / 60.f + 12, 6); sat = ds_clamp(sat * s->sat, 0, 1); v = ds_clamp(v * s->val, 0, 1);
+  if (s->tint > 0) { h = fmodf(s->hue / 60.f + 12, 6); sat = ds_clamp(sat * s->sat + s->tint * (1 - sat), 0, 1); }
+  else { h = fmodf(h + s->hue / 60.f + 12, 6); sat = ds_clamp(sat * s->sat, 0, 1); }
+  v = ds_clamp(v * s->val, 0, 1);
   float c = v * sat, x = c * (1 - fabsf(fmodf(h, 2) - 1)), m = v - c, o[3];
   int k = (int)h;
   o[0] = k == 0 || k == 5 ? c : k == 1 || k == 4 ? x : 0;
@@ -127,7 +129,7 @@ static void apply_palette(t3_texture *T, actor_model model, const actor_palette 
   for (int i = 0; i < M->nrect; i++) {
     const cast_rect *r = &M->rect[i];
     const actor_swatch *s = sw[r->kind];
-    if (s->hue == 0 && s->sat == 1 && s->val == 1) continue;
+    if (s->hue == 0 && s->sat == 1 && s->val == 1 && s->tint == 0) continue;
     for (int y = r->y; y < r->y + r->h && y < T->height; y++)
       for (int x = r->x; x < r->x + r->w && x < T->width; x++) hsv_turn(T->pixels + (size_t)(y * T->width + x) * 4, s);
   }

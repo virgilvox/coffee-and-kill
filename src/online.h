@@ -49,4 +49,8 @@ void game_on_intent(const mp_val *intent);
 void game_on_ctl(const mp_val *ctl);
 void game_leave_online(const char *msg);
 
+/* the phone pads on a screen (menu true): their stick and buttons as menu events by p= slot
+ * (input.h), LIGHT picks, KICK goes back, HEAVY changes the colour, DODGE swaps, EXTREME starts */
+void online_pads_menu(bool menu);
+
 #endif
