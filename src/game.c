@@ -292,7 +292,8 @@ static void start_match(void);
 static int pending_stage = -1, pending_step;
 static void go_match(void) {
   int s = G.sel.stage;
-  if (s < 0 || s >= STAGE_N) s = 0;
+  if (s < 0) s = (int)(ck_rand() * STAGE_N);   /* RANDOM */
+  if (s >= STAGE_N) s = 0;
   if (stage_current() == s || !stage_needs_load(s)) { use_stage(s); start_match(); return; }
   pending_stage = s; pending_step = 0;
   ui_show("s-load"); ui_load(0.1f, "walking over to the lab");
@@ -695,6 +696,16 @@ static void update_hud(void) {
   }
 }
 
+/* the stage select's view of a stage (and its still, tools/bake-stills.mjs): three quarters on
+ * from the near side of the fighters' line, over the ring, swaying slowly; walls kept out */
+static void stage_view(float t, bool still, v3 *w, v3 *g) {
+  float lift, amax; bool one; stage_camera_rules(&lift, &amax, &one);
+  float a = 0.85f + 0.08f * sinf(t * 0.2f), d = fminf(8.5f, amax + 0.4f);
+  /* live, the ring sits a little under the middle, above the screen's card and strip; a still
+   * looks level, at the room around the ring */
+  *g = (v3){0, still ? 1.45f : 0.55f, 0};
+  *w = (v3){sinf(a) * d, (still ? 2.35f : 3.1f) + lift, cosf(a) * d};
+}
 static void update_camera(float A) {
   fighter *P = G.f[0], *e = G.f[1];
   v3 *pp = fighter_pos(P), *ep = fighter_pos(e);
@@ -710,6 +721,9 @@ static void update_camera(float A) {
       float z = G.menu_orbit * 0.25f;
       w = (v3){sinf(z) * 3.6f - 1.4f, 1.35f, cosf(z) * 3.6f + 0.4f}; g = (v3){0.95f, 1.0f, 0};
       clip = false;
+    } else if (scr && !strcmp(scr, "s-stage")) {
+      stage_view(G.t, false, &w, &g);
+      clip = STAGES[stage_current() >= 0 ? stage_current() : 0].kind != STK_WORKSHOP;   /* the workshop's view is clear as it is */
     } else {
       float o = v ? 6.6f : 7.4f, B = v ? 1.7f : 1.9f, z = G.menu_orbit * (v ? 0.35f : 1);
       w = (v3){sinf(z) * o * 0.9f, B, cosf(z) * o};
@@ -1235,7 +1249,7 @@ static void act(const char *v) {
     const char *s = ui_screen();
     if (s && !strcmp(s, "s-controls")) ui_show(G.screen_before_controls); else ui_show("s-title");
   } else if (!strcmp(v, "start")) go_match();
-  else if (!strcmp(v, "stage")) { if (!stage_needs_load(G.sel.stage)) use_stage(G.sel.stage); ui_show("s-stage"); }
+  else if (!strcmp(v, "stage")) { if (G.sel.stage >= 0 && !stage_needs_load(G.sel.stage)) use_stage(G.sel.stage); ui_show("s-stage"); }
   else if (!strcmp(v, "stageback")) { enter_select(); ui_select_return(); ui_show("s-select"); }
   else if (!strncmp(v, "t", 1) && tourney_act(v)) {}
   else if (!strcmp(v, "resume")) toggle_pause();
@@ -1352,6 +1366,26 @@ static void portrait_frame(void) {
 }
 #endif
 
+#ifdef CK_STILLS
+/* test builds (-DCK_STILLS -DCK_NOUI): each stage's still for the stage select, baked by
+ * tools/bake-stills.mjs: stage s loaded (KEYHOLDER's world takes a long frame the first time), the
+ * fighters away, the select's view of it, then "[still] s key" on the frame to keep */
+static int st_s = 0, st_step = 0, st_wait = -1;
+static void stills_frame(void) {
+  if (st_s >= STAGE_N) return;
+  if (st_wait < 0) {
+    if (!stage_load(st_s, st_step++)) return;
+    for (int t = 0; t < 2; t++) if (G.f[t]) { body_attach(G.f[t]->body, NULL); }
+    st_wait = 0;
+  }
+  stage_update(1.f / 60, G.t, (v3){0, 1.2f, 0});
+  v3 w, g; stage_view(0, true, &w, &g);
+  if (STAGES[st_s].kind != STK_WORKSHOP) stage_camera(g, &w);
+  t3_object_set_position(G.cam, w.x, w.y, w.z); t3_object_look_at(G.cam, g.x, g.y, g.z);
+  if (++st_wait == 4) { ck_log("[still] %d %s", st_s, STAGES[st_s].key); st_s++; st_step = 0; st_wait = -1; }
+}
+#endif
+
 #ifdef CK_SHOWROOM
 /* test builds (-DCK_SHOWROOM -DCK_NOUI): fighter i in its four colours side by side under the
  * select's light, frame i * 8 + 6 (for tuning roster.c's alternates) */
@@ -1453,6 +1487,9 @@ void game_frame(float dt) {
 #ifdef CK_SHOWROOM
   (void)dt; showroom_frame(); return;
 #endif
+#ifdef CK_STILLS
+  G.t += dt; stills_frame(); return;
+#endif
   /* keys: the UI's onKey, then the window handler, as the page registers them */
   pad_keys();
   /* the UI's listeners first (ui_frame reads the keys, the typed text and the
@@ -1474,6 +1511,9 @@ void game_frame(float dt) {
 void game_draw(void) {
 #if defined(CK_PORTRAITS) || defined(CK_SHOWROOM)
   if (G.arena_ready && G.phase != PH_LOAD) { render_scene(stage_scene(), G.cam); return; }
+#endif
+#ifdef CK_STILLS
+  if (G.arena_ready && G.phase != PH_LOAD) { render_scene(stage_scene(), G.cam); stage_fx_frame(G.cam); fx_begin(); stage_fx_draw(); fx_end(); return; }
 #endif
   if (G.arena_ready && G.phase != PH_LOAD) {
     render_scene(stage_scene(), G.cam);

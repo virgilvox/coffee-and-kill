@@ -9,6 +9,7 @@
  * is plain data the screen edits with tourney.c's own calls. */
 #include "ui_int.h"
 #include "ui_kit.h"
+#include "ui_hint.h"
 #include "ck.h"
 #include "audio.h"
 #include "input.h"
@@ -18,6 +19,7 @@
 #include "special.h"
 #include "tourney.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
@@ -53,58 +55,133 @@ static void arrow(cv *c, float x, float y, int dir, col_t col) {
 }
 
 /* ================================================================== the stage select */
-static rlayer st_R; static int st_focus;   /* 0 the stages, 1 FIGHT */
+/* A strip of every stage (and RANDOM) along the bottom: a still of each, baked from the game by
+ * tools/bake-stills.mjs, and its short name. The stage itself stands behind the screen once it is
+ * loaded; a KEYHOLDER stage that is not loaded yet shows its still large instead. A (Enter) or a
+ * second click fights on the stage picked; B (Escape) goes back to the fighters. */
+#define ST_CELLS (STAGE_N + 1)            /* the stages, then RANDOM */
+#define ST_TW 110
+#define ST_TH 62
+#define ST_GAP 8
+#define ST_Y 590
+static const char *SHORT[] = {"WORKSHOP", "THE LAB", "MAIN ST", "BACK LOT", "LONG BENCH", "LASER CORNER", "THE FRIDGE", "MACHINE SHOP", "UNFOLDED"};
+static struct { uint8_t *px; } THUMB[16];
+static layer st_card, st_strip, st_prev; static int st_prev_of = -2;
+static hint_line st_hint;
+static float st_x(int k) { return (CK_W - (ST_CELLS * ST_TW + (ST_CELLS - 1) * ST_GAP)) / 2.f + k * (ST_TW + ST_GAP); }
+static int st_cell(void) { return !scr_sel ? 0 : scr_sel->stage < 0 ? STAGE_N : scr_sel->stage; }
+/* a still, decoded (and averaged down to w x h, when given) */
+static uint8_t *still_load(int s, int *w, int *h, int tw, int th) {
+  char n[48]; snprintf(n, sizeof n, "still_%s.jpg", STAGES[s].key);
+  size_t len; uint8_t *d = ck_asset(n, &len);
+  if (!d) return NULL;
+  t3_texture *T = t3_texture_load_memory(d, len);
+  free(d);
+  if (!T || !T->pixels) { if (T) t3_release(T); return NULL; }
+  int W = T->width, H = T->height, ow = tw ? tw : W, oh = th ? th : H;
+  uint8_t *o = malloc((size_t)ow * oh * 4);
+  for (int y = 0; y < oh; y++) for (int x = 0; x < ow; x++) {
+    int x0 = x * W / ow, x1 = (x + 1) * W / ow, y0 = y * H / oh, y1 = (y + 1) * H / oh, n2 = 0;
+    unsigned acc[3] = {0, 0, 0};
+    for (int yy = y0; yy < y1; yy++) for (int xx = x0; xx < x1; xx++) { const uint8_t *p = T->pixels + ((size_t)yy * W + xx) * 4; acc[0] += p[0]; acc[1] += p[1]; acc[2] += p[2]; n2++; }
+    uint8_t *q = o + ((size_t)y * ow + x) * 4;
+    for (int c = 0; c < 3; c++) q[c] = (uint8_t)(acc[c] / (n2 ? n2 : 1));
+    q[3] = 255;
+  }
+  t3_release(T);
+  *w = ow; *h = oh;
+  return o;
+}
+static void stills_init(void) {
+  for (int s = 0; s < STAGE_N && s < 16; s++) { int w, h; THUMB[s].px = still_load(s, &w, &h, ST_TW - 6, ST_TH - 6); }
+}
 static void stage_paint(void) {
   nhits = 0;
   if (!scr_sel) return;
-  int s = scr_sel->stage; if (s < 0 || s >= STAGE_N) s = 0;
-  const stage_def *d = &STAGES[s];
-  float px = 80, W = 1120, H = 196, top = CK_H - 18 - H;
-  R_begin(&st_R, 64, (int)top - 14, 1160, CK_H - (int)top + 14);
-  cv *c = st_R.L.c;
-  c_box(c, px, top, W, H, COL(C_CREAM), 4, COL(C_INK), 8, 8, COL(C_PINK));
-  if (st_focus == 0) c_dash_rect(c, px - 9, top - 9, W + 18, H + 18, 4, COL(C_PINK));
-  float ix = px + 24, iy = top + 18, IW = W - 48 - 340;
-  lab_paint(c, ix, iy, "STAGE");
-  char cnt[16]; snprintf(cnt, sizeof cnt, "%d / %d", s + 1, STAGE_N);
-  t_draw(c, F_LCD, 14, 0, ix + IW - t_width(F_LCD, 14, 0, cnt), iy + t_asc(F_LCD, 14), cnt, COLA(C_INK, 0.6f));
-  float fs = fit_fs(d->name, 46, IW - 60, 26);
-  arrow(c, ix + 8, iy + 50, -1, COL(C_INK));
-  t_draw(c, F_MARKER, fs, 0, ix + 30, t_base(F_MARKER, fs, iy + 26, 48), d->name, COL(C_INK));
-  arrow(c, ix + 30 + t_width(F_MARKER, fs, 0, d->name) + 22, iy + 50, 1, COL(C_INK));
-  hit_add(ix - 6, iy + 30, 30, 40, H_STAGE, -1, 0, NULL);
-  hit_add(ix + 30 + t_width(F_MARKER, fs, 0, d->name) + 8, iy + 30, 30, 40, H_STAGE, 1, 0, NULL);
-  char bl[2][160]; int nb = t_wrap(F_TYPE, 14, 0, d->blurb, IW, false, bl, 2);
-  for (int k = 0; k < nb; k++) t_draw(c, F_TYPE, 14, 0, ix, t_base(F_TYPE, 14, iy + 82 + k * 19, 19), bl[k], COL(C_INK));
-  const char *note = d->web ? "THE WEB VERSION'S OWN SHOP" : stage_needs_load(s) ? "FROM KEYHOLDER. LOADS ON FIGHT" : "FROM KEYHOLDER";
-  t_draw(c, F_TYPE, 11, 1.98f, ix, iy + 82 + nb * 19 + 8 + t_asc(F_TYPE, 11), note, COLA(C_INK, 0.7f));
-  /* the strip: every stage */
-  float sw = (IW - (STAGE_N - 1) * 6) / STAGE_N, sy = top + H - 18 - 26;
-  for (int k = 0; k < STAGE_N; k++) {
-    float bx = ix + k * (sw + 6);
-    bool on = k == s;
-    c_rect(c, bx, sy, sw, 26, on ? COL(C_PINK) : COL(C_PAPER));
-    c_border(c, bx, sy, sw, 26, 2, COL(C_INK));
-    char n[4]; snprintf(n, sizeof n, "%d", k + 1);
-    t_draw(c, F_LCD, 13, 0, bx + (sw - t_width(F_LCD, 13, 0, n)) / 2, sy + 5 + t_asc(F_LCD, 13), n, COL(C_INK));
-    hit_add(bx, sy, sw, 26, H_STAGE, 100 + k, 0, NULL);
+  int cell = st_cell();
+  bool rnd = cell == STAGE_N;
+  const stage_def *d = rnd ? NULL : &STAGES[cell];
+  /* the card: the name, the line, where it comes from; FIGHT */
+  L_ensure(&st_card, 1180, 120);
+  cv *c = st_card.c;
+  c_box(c, 0, 0, 1160, 104, COL(C_CREAM), 4, COL(C_INK), 8, 8, COL(C_PINK));
+  const char *nm = rnd ? "RANDOM" : d->name;
+  float fs = fit_fs(nm, 40, 760, 26);
+  t_draw(c, F_MARKER, fs, 0, 24, 18 + fs * 0.74f, nm, COL(C_INK));
+  const char *bl = rnd ? "A different stage every time you press it." : d->blurb;
+  t_draw(c, F_TYPE, 15, 0, 24, 76, bl, COLA(C_INK, 0.9f));
+  const char *note = rnd ? "" : d->web ? "THE WEB VERSION'S OWN SHOP" : stage_needs_load(cell) ? "FROM KEYHOLDER. LOADS WHEN THE FIGHT STARTS" : "FROM KEYHOLDER";
+  t_draw(c, F_TYPE, 14, 1.4f, 24, 96, note, COLA(C_INK, 0.7f));
+  btn_t go; btn_init(&go, 1160 - 24 - 280, 20, 280, 64, 38.4f, 22, 8, BTN_GO, "FIGHT!", "start");
+  btn_paint_at(c, &go, 1, 0, 0);
+  hit_add(60 + go.x, 470 + go.y, go.w, go.h, H_ACT, 0, 0, "start");
+  /* the strip */
+  float sw = st_x(ST_CELLS - 1) + ST_TW - st_x(0);
+  L_ensure(&st_strip, (int)sw + 20, ST_TH + 44);
+  c = st_strip.c;
+  for (int k = 0; k < ST_CELLS; k++) {
+    float x = st_x(k) - st_x(0) + 6, y = 6;
+    bool on = k == cell;
+    if (on) { x -= 3; y -= 3; }
+    c_rect(c, x + (on ? 7 : 4), y + (on ? 7 : 4), ST_TW, ST_TH, COL(C_INK));
+    c_rect(c, x, y, ST_TW, ST_TH, COL(on ? C_PINK : C_PAPER));
+    if (k < STAGE_N && THUMB[k].px) cv_draw_image(c, THUMB[k].px, ST_TW - 6, ST_TH - 6, x + 3, y + 3, ST_TW - 6, ST_TH - 6);
+    else if (k == STAGE_N) {
+      static const tshadow QS = {4, {{-2, -2, COL(C_INK)}, {2, -2, COL(C_INK)}, {-2, 2, COL(C_INK)}, {2, 2, COL(C_INK)}}};
+      for (float q = -ST_TH; q < ST_TW; q += 16) {
+        cv_begin(c); cv_move(c, x + 3 + q, y + ST_TH - 3); cv_line(c, x + 3 + q + 7, y + ST_TH - 3); cv_line(c, x + 3 + q + 7 + ST_TH - 6, y + 3); cv_line(c, x + 3 + q + ST_TH - 6, y + 3); cv_close(c);
+        cv_save(c); cv_begin(c); cv_rect(c, x + 3, y + 3, ST_TW - 6, ST_TH - 6); cv_clip(c);
+        cv_begin(c); cv_move(c, x + 3 + q, y + ST_TH - 3); cv_line(c, x + 3 + q + 7, y + ST_TH - 3); cv_line(c, x + 3 + q + 7 + ST_TH - 6, y + 3); cv_line(c, x + 3 + q + ST_TH - 6, y + 3); cv_close(c);
+        cv_fill_hex(c, C_PINK, 1); cv_fill(c); cv_restore(c);
+      }
+      float tw = t_width(F_MARKER, 34, 0, "?");
+      t_draw_sh(c, F_MARKER, 34, 0, x + (ST_TW - tw) / 2, y + ST_TH / 2 + 12, "?", COL(C_CREAM), &QS);
+    }
+    c_border(c, x, y, ST_TW, ST_TH, 3, COL(C_INK));
+    const char *sn = k < STAGE_N ? SHORT[k] : "RANDOM";
+    float nfs = 14; while (nfs > 12 && t_width(F_TYPE, nfs, 0, sn) > ST_TW) nfs -= 0.5f;
+    float nw = t_width(F_TYPE, nfs, 0, sn);
+    static const tshadow NS = {1, {{1, 1, COL(C_INK)}}};
+    t_draw_sh(c, F_TYPE, nfs, 0, x + (ST_TW - nw) / 2, y + ST_TH + 22, sn, on ? COL(C_PINK) : COL(C_CREAM), &NS);
+    hit_add(st_x(k), ST_Y, ST_TW, ST_TH + 26, H_STAGE, 100 + k, 0, NULL);
   }
-  btn_t go; btn_init(&go, px + W - 24 - 320, top + (H - 64) / 2, 320, 64, 38.4f, 22, 8, BTN_GO, "FIGHT!", "start");
-  btn_paint_at(c, &go, st_focus == 1 ? 1 : 0, 0, 0);
-  hit_add(go.x, go.y, 320, 64, H_ACT, 0, 0, "start");
+  /* the preview of a stage that is not loaded yet: its still, large */
+  if (!rnd && stage_needs_load(cell) && st_prev_of != cell) {
+    int w, h; uint8_t *px = still_load(cell, &w, &h, 0, 0);
+    st_prev_of = cell;
+    if (px) {
+      L_ensure(&st_prev, w + 24, h + 24);
+      c_box(st_prev.c, 0, 0, w + 8, h + 8, COL(C_CREAM), 4, COL(C_INK), 8, 8, COL(C_PINK));
+      cv_draw_image(st_prev.c, px, w, h, 4, 4, w, h);
+      free(px);
+    } else st_prev_of = -1;
+  }
 }
-static void stage_pick(int d, bool absolute) {
-  int s = absolute ? d : (scr_sel->stage + d + STAGE_N) % STAGE_N;
-  if (ui_cb.stage) ui_cb.stage(s);
+static void stage_pick(int k) {
+  if (k == STAGE_N) { if (scr_sel) scr_sel->stage = -1; ui_menus_changed(); }
+  else if (ui_cb.stage) ui_cb.stage(k);
   sfx_ui();
 }
 static void stage_key(int e) {
-  if (e == WC_KEY_UP || e == WC_KEY_DOWN || e == WC_KEY_TAB) { st_focus ^= 1; sfx_ui(); }
-  else if (e == WC_KEY_LEFT || e == WC_KEY_RIGHT) { if (st_focus == 0) stage_pick(e == WC_KEY_RIGHT ? 1 : -1, false); else { st_focus = 0; sfx_ui(); } }
-  else if (e == WC_KEY_ENTER || e == WC_KEY_KP_ENTER) { if (st_focus == 1) { act("start"); return; } st_focus = 1; sfx_ui(); }
-  else if (e == WC_KEY_ESCAPE) { act("stageback"); return; }
-  else return;
-  stage_paint();
+  int k = st_cell();
+  if (e == WC_KEY_LEFT || e == WC_KEY_UP) stage_pick((k + ST_CELLS - 1) % ST_CELLS);
+  else if (e == WC_KEY_RIGHT || e == WC_KEY_DOWN || e == WC_KEY_TAB) stage_pick((k + 1) % ST_CELLS);
+  else if (e == WC_KEY_ENTER || e == WC_KEY_KP_ENTER || e == WC_KEY_SPACE) { act("start"); return; }
+  else if (e == WC_KEY_ESCAPE || e == WC_KEY_BACKSPACE) { act("stageback"); return; }
+}
+static void stage_draw(void) {
+  static const tshadow SH = {1, {{1, 1, COL(C_INK)}}};
+  hint_style hs = {15, 0.6f, COL(C_CREAM), &SH};
+  hint_line_set(&st_hint, &hs, hint_pick("{LEFT}{RIGHT} STAGE   {A} FIGHT   {B} FIGHTERS", "[LEFT][RIGHT] STAGE   [ENTER] FIGHT   [ESC] FIGHTERS",
+                                         "<CLICK> A STAGE, AGAIN TO FIGHT   <RIGHT CLICK> FIGHTERS", "<STICK> STAGE   <LIGHT> FIGHT   <KICK> FIGHTERS"));
+  int cell = st_cell();
+  if (cell < STAGE_N && stage_needs_load(cell) && st_prev_of == cell && st_prev.c) {
+    L_upload(&st_prev);
+    ov_draw(st_prev.t, (CK_W - (st_prev.w - 16)) / 2.f, 96, 1);
+  }
+  L_upload(&st_card); ov_draw(st_card.t, 60, 470, 1);
+  L_upload(&st_strip); ov_draw(st_strip.t, st_x(0) - 6, ST_Y - 6, 1);
+  hint_line_draw(&st_hint, 640, 702, 1);
 }
 
 /* ================================================================== the tourney setup */
@@ -392,6 +469,7 @@ static void champ_paint(void) {
 /* ================================================================== the module */
 void menus_init(void) {
   select_init();
+  stills_init();
   head_paint(&HD_SEL, "PICK YOUR POISON");
   head_paint(&HD_STAGE, "PICK THE STAGE");
   head_paint(&HD_TOURNEY, "TOURNEY");
@@ -410,16 +488,22 @@ static void repaint(void) {
 void ui_menus_changed(void) { repaint(); }
 void menus_show(const char *id) {
   if (!strcmp(id, "s-select")) select_show();
-  if (!strcmp(id, "s-stage")) st_focus = 0;
+  if (!strcmp(id, "s-stage")) st_prev_of = -2;
   if (!strcmp(id, "s-tsetup")) { ts_focus = TT ? ts_rows() - 1 : 0; ts_btn = 1; }
   if (!strcmp(id, "s-bracket")) br_btn = 0;
   if (!strcmp(id, "s-champ")) { ch_idx = 0; for (int i = 0; i < 2; i++) { ch_b[i].sel = i == 0; tr_jump(&ch_b[i].t, i == 0 ? 1 : 0); ch_b[i].painted = -1; } }
   repaint();
 }
+static void menus_draw_screen(const char *s);
+static void hover_draw(void);
 void menus_draw(void) {
   const char *s = scr_cur;
+  menus_draw_screen(s);
+  if (strcmp(s, "s-select") && strcmp(s, "s-champ")) hover_draw();
+}
+static void menus_draw_screen(const char *s) {
   if (!strcmp(s, "s-select")) { draw_shade_v(); draw_back(); head_draw(&HD_SEL); select_draw(); return; }
-  if (!strcmp(s, "s-stage")) { draw_shade_v(); draw_back(); head_draw(&HD_STAGE); R_draw(&st_R); return; }
+  if (!strcmp(s, "s-stage")) { draw_shade_v(); draw_back(); head_draw(&HD_STAGE); stage_draw(); return; }
   if (!strcmp(s, "s-tsetup")) { ov_fill(0, 0, CK_W, CK_H, 0x0a0a0a, 0.62f); draw_back(); head_draw(&HD_TOURNEY); R_draw(&ts_R); return; }
   if (!strcmp(s, "s-bracket")) { ov_fill(0, 0, CK_W, CK_H, 0x0a0a0a, 0.62f); head_draw(&HD_TOURNEY); R_draw(&br_R); return; }
   if (!strcmp(s, "s-champ")) { draw_shade_h(); R_draw(&ch_R); for (int i = 0; i < 2; i++) btn_draw(&ch_b[i]); return; }
@@ -437,13 +521,21 @@ void menus_key(int e) {
   }
 }
 
+/* the hit rect under the mouse, outlined so a click's target shows before it lands */
+static int hover_hit = -1;
+static void hover_draw(void) {
+  if (hover_hit < 0 || hover_hit >= nhits || input_last_dev != DEV_MOUSE) return;
+  const hit_t *h = &hits[hover_hit];
+  float x = h->x - 4, y = h->y - 4, w = h->w + 8, hh = h->h + 8;
+  ov_fill(x, y, w, 3, C_PINK, 1); ov_fill(x, y + hh - 3, w, 3, C_PINK, 1); ov_fill(x, y, 3, hh, C_PINK, 1); ov_fill(x + w - 3, y, 3, hh, C_PINK, 1);
+}
 static void click(const hit_t *h) {
   const char *s = scr_cur;
   switch (h->kind) {
     case H_ACT:
       if (!strcmp(s, "s-tsetup")) tsetup_act(h->s); else act(h->s);
       return;
-    case H_STAGE: if (h->a >= 100) stage_pick(h->a - 100, true); else stage_pick(h->a, false); st_focus = 0; break;
+    case H_STAGE: if (h->a - 100 == st_cell()) { act("start"); return; } stage_pick(h->a - 100); break;
     case H_TSIZE: tourney_set_size(TT, h->a); sfx_ui(); break;
     case H_TSTAGE: TT->stage += h->a; if (TT->stage < -1) TT->stage = STAGE_N - 1; if (TT->stage >= STAGE_N) TT->stage = -1; sfx_ui(); break;
     case H_TCTL: tourney_cycle_ctl(TT, h->a, 1); ts_focus = 2 + h->a; sfx_ui(); break;
@@ -465,9 +557,15 @@ void menus_pointer(float x, float y, bool pressed) {
     if (pressed) for (int i = 0; i < 2; i++) if (btn_hit(&ch_b[i], x, y)) { act(ch_b[i].act); return; }
     return;
   }
+  /* the mouse over a screen: BACK and whatever can be clicked light up; a right click goes back */
+  const ck_pointer *P = input_pointer();
+  bool has_back = !strcmp(s, "s-stage") || !strcmp(s, "s-tsetup");
+  bool on_back = has_back && btn_hit(&back_b, x, y);
+  if (has_back && on_back != back_b.sel) btn_set_sel(&back_b, on_back);
+  hover_hit = -1;
+  for (int i = 0; i < nhits; i++) if (x >= hits[i].x && x < hits[i].x + hits[i].w && y >= hits[i].y && y < hits[i].y + hits[i].h) { hover_hit = i; break; }
+  if (P->rpressed && has_back) { act(!strcmp(s, "s-stage") ? "stageback" : "back"); return; }
   if (!pressed) return;
-  if ((!strcmp(s, "s-stage") || !strcmp(s, "s-tsetup")) && btn_hit(&back_b, x, y)) {
-    act(!strcmp(s, "s-stage") ? "stageback" : "back"); return;
-  }
-  for (int i = 0; i < nhits; i++) if (x >= hits[i].x && x < hits[i].x + hits[i].w && y >= hits[i].y && y < hits[i].y + hits[i].h) { hit_t h = hits[i]; click(&h); return; }
+  if (on_back) { act(!strcmp(s, "s-stage") ? "stageback" : "back"); return; }
+  if (hover_hit >= 0) { hit_t h = hits[hover_hit]; click(&h); }
 }
