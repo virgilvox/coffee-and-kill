@@ -101,6 +101,10 @@ static void gui_announce(const char *a, const char *b) {
   ui_announce(a, b, false);
   if (HOSTING) { mp_val *e = ui_ev("announce"); arg(e, mp_str(a)); arg(e, mp_str(b)); push_ev(e); }
 }
+static void gui_announce_stay(const char *a, const char *b) {
+  ui_announce(a, b, true);
+  if (HOSTING) { mp_val *e = ui_ev("announce"); arg(e, mp_str(a)); arg(e, mp_str(b)); push_ev(e); }
+}
 static void gui_clear_announce(void) { ui_clear_announce(); if (HOSTING) push_ev(ui_ev("clearAnnounce")); }
 static void gui_set_pips(int i, int on) {
   ui_set_pips(i, on, RT);
@@ -307,6 +311,7 @@ static void start_match(void) {
   G.wins[0] = G.wins[1] = 0; G.round = 1;
   for (int i = 0; i < 2; i++) { G.has_brain[i] = G.cpu[i] && !G.net_role; if (G.has_brain[i]) brain_init(&G.br[i], G.level[i]); }
   input_mode = G.cpu[0] || G.cpu[1] ? 1 : 2;
+  input_dev_reset();
   gui_hide_all(); gui_hud(true);
   const char *a, *b; labels(&a, &b);
   gui_set_names(fname(0), fname(1), a, b);
@@ -326,14 +331,23 @@ static void start_round(void) {
   char r[24]; snprintf(r, sizeof r, "ROUND %d", G.round);
   gui_set_round(r);
   gui_combo(0, 0, NULL); gui_combo(1, 0, NULL);
-  gui_set_hint(input_mode == 1 ? "WASD move   Q light   E heavy   R kick   SPACE block   SHIFT dodge   F extreme"
-                           : "P1: WASD Q E R SPACE SHIFT F     P2: ARROWS , . / R-SHIFT ENTER '");
+  if (G.net_role) gui_set_hint("WASD move   Q light   E heavy   R kick   SPACE block   SHIFT dodge   F extreme");
   G.phase = PH_INTRO; G.phase_t = 0; G.intro_stage = 0; G.cam_snap = true;
   gui_announce(r, G.round == RT * 2 - 1 ? "FINAL ROUND" : "");
   sfx_bell(); music_set_level(1);
 }
 
+/* who took the round, under the banner, once the K.O. has landed (or TIME UP has had its moment) */
+static int result_side = -2; static bool result_ko;
+static void show_result(void) {
+  char line[64];
+  if (result_side >= 0) snprintf(line, sizeof line, "%s TAKES ROUND %d", fname(result_side), G.round);
+  else snprintf(line, sizeof line, "ROUND %d IS A DRAW", G.round);
+  gui_announce_stay(result_ko ? (G.perfect ? "PERFECT" : "K.O.") : "TIME UP", line);
+  result_side = -2;
+}
 static void end_round(int A) {
+  result_side = A; result_ko = G.phase == PH_KO;
   G.phase = PH_BETWEEN; G.phase_t = 0;
   if (A >= 0) G.wins[A]++; else { G.wins[0]++; G.wins[1]++; }
   gui_set_pips(0, G.wins[0]); gui_set_pips(1, G.wins[1]);
@@ -613,6 +627,7 @@ static void phase_logic(float A) {
       if (G.phase_t > 3) { G.slow = 1; end_round(G.ko_winner); }
       break;
     case PH_BETWEEN:
+      if (result_side > -2 && G.phase_t >= (result_ko ? 0 : 1.0f)) show_result();
       if (G.phase_t > 2.6f) {
         gui_clear_announce();
         if (G.match_over && G.in_tourney && G.wins[0] == G.wins[1]) { G.match_over = false; G.round++; start_round(); gui_toast("SUDDEN DEATH"); }
@@ -639,7 +654,40 @@ static void update_trails(void) {
   }
 }
 
+/* the fight's prompts name the buttons each person is using: the hint along the bottom and the
+ * button by a full EXTREME meter. Online, the host's hint goes to the page as it always did. */
+static const char *pad_part(int dev, int slot, bool two) {
+  switch (dev) {
+    case DEV_PAD: return "{X} LIGHT  {Y} HEAVY  {B} KICK  {LB} BLOCK  {A} DODGE  {RT} EXTREME";
+    case DEV_PHONE: return "<LIGHT>  <HEAVY>  <KICK>  <BLOCK>  <DODGE>  <EXTREME>";
+    default:
+      if (!two) return "[W][A][S][D] MOVE  [Q] LIGHT  [E] HEAVY  [R] KICK  [SPACE] BLOCK  [SHIFT] DODGE  [F] EXTREME";
+      return slot ? "ARROWS  [,] LIGHT  [.] HEAVY  [/] KICK  [R-SHIFT] BLOCK  [ENTER] DODGE  ['] EXTREME"
+                  : "[W][A][S][D]  [Q] LIGHT  [E] HEAVY  [R] KICK  [SPACE] BLOCK  [SHIFT] DODGE  [F] EXTREME";
+  }
+}
+static void fight_prompts(void) {
+  if (G.net_role) {
+    int me = HOSTING ? 0 : 1;
+    ui_set_extreme_key(me, input_dev_of(0) == DEV_PAD ? "{RT}" : input_dev_of(0) == DEV_PHONE ? "<EXTREME>" : "[F]");
+    ui_set_extreme_key(1 - me, "");
+    return;
+  }
+  bool two = humans() == 2;
+  for (int k = 0; k < 2; k++) {
+    int slot = two ? k : 0, d = input_dev_of(slot);
+    ui_set_extreme_key(k, G.cpu[k] ? "" : d == DEV_PAD ? "{RT}" : d == DEV_PHONE ? "<EXTREME>" : two && k ? "[']" : "[F]");
+  }
+  char h[200];
+  if (!two) snprintf(h, sizeof h, "%s", pad_part(input_dev_of(0), 0, false));
+  else if (input_dev_of(0) == DEV_PAD && input_dev_of(1) == DEV_PAD) snprintf(h, sizeof h, "%s", pad_part(DEV_PAD, 0, true));
+  else snprintf(h, sizeof h, "P1 %s     P2 %s", input_dev_of(0) == DEV_KEYS ? "[W][A][S][D] [Q][E][R] [SPACE] [SHIFT] [F]" : pad_part(input_dev_of(0), 0, true),
+                input_dev_of(1) == DEV_KEYS ? "ARROWS [,][.][/] [R-SHIFT] [ENTER] [']" : pad_part(input_dev_of(1), 1, true));
+  ui_set_hint(h);
+}
+
 static void update_hud(void) {
+  if (G.phase >= PH_INTRO && G.phase <= PH_BETWEEN) fight_prompts();
   for (int e = 0; e < 2; e++) {
     fighter *P = G.f[e];
     ui_set_health(e, P->hp, false); ui_set_meter(e, P->meter);

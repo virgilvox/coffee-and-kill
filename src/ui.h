@@ -68,7 +68,8 @@ void ui_set_meter(int i, float pct);
 void ui_set_pips(int i, int on, int of);
 void ui_set_timer(float t);
 void ui_set_round(const char *s);
-void ui_set_hint(const char *s);
+void ui_set_hint(const char *s);           /* may name buttons with ui_hint.h's glyphs: "{X} LIGHT" */
+void ui_set_extreme_key(int i, const char *glyph);   /* the button by a full EXTREME meter ("{RT}", "[F]", "") */
 void ui_combo(int i, int n, const char *small);
 void ui_announce(const char *big, const char *small, bool stay);
 void ui_clear_announce(void);

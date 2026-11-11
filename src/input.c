@@ -124,9 +124,19 @@ static const keymap SL = {   /* Sl: one player, every key */
 static bool any_down(const int *k, int n) { for (int i = 0; i < n; i++) if (k[i] && DOWN(kcur, k[i])) return true; return false; }
 static bool any_pressed(const int *k, int n) { for (int i = 0; i < n; i++) if (k[i] && DOWN(kcur, k[i]) && !DOWN(kprev, k[i])) return true; return false; }
 
+static int pdev[2];
+int input_dev_of(int slot) { return pdev[slot & 1]; }
+void input_dev_reset(void) { pdev[0] = pdev[1] = input_last_dev == DEV_MOUSE ? DEV_KEYS : input_last_dev; }
+static bool any_key(const keymap *A) {
+  const int *k = &A->left[0];
+  for (int i = 0; i < (int)(sizeof *A / sizeof(int)); i++) if (k[i] && DOWN(kcur, k[i])) return true;
+  return false;
+}
+
 intent_t input_poll(int s) {
   const keymap *A = input_mode == 1 ? &SL : s == 0 ? &RL : &XL;
   intent_t P = {0};
+  if (any_key(A)) pdev[s & 1] = DEV_KEYS;
   P.mx = (any_down(A->right, 2) ? 1.f : 0.f) - (any_down(A->left, 2) ? 1.f : 0.f);
   P.my = (any_down(A->up, 2) ? 1.f : 0.f) - (any_down(A->down, 2) ? 1.f : 0.f);
   P.block = any_down(A->block, 3);
@@ -140,6 +150,7 @@ intent_t input_poll(int s) {
     if (i < 0 || i > 3) continue;   /* connected or not: see the menu events above */
     const wc_pad_t *n = &pcur[i];
     float r = n->left_x / 32767.f, v = n->left_y / 32767.f, o = 0.25f;
+    if (n->buttons || fabsf(r) > o || fabsf(v) > o || n->right_trigger > WC_TRIGGER_PRESSED || n->left_trigger > WC_TRIGGER_PRESSED) pdev[s & 1] = DEV_PAD;
     if (fabsf(r) > o) P.mx = fabsf(r) > fabsf(P.mx) ? ck_sign(r) * fminf(1, (fabsf(r) - o) / (1 - o) + 0.2f) : P.mx;
     if (fabsf(v) > o) P.my = fabsf(v) > fabsf(P.my) ? -ck_sign(v) * fminf(1, (fabsf(v) - o) / (1 - o) + 0.2f) : P.my;
     /* the standard mapping: 0 A, 1 B, 2 X, 3 Y, 4 LB, 5 RB, 6 LT, 7 RT, 12..15 the d-pad */
@@ -158,6 +169,7 @@ intent_t input_poll(int s) {
   /* the touch controls of one player and the phone pads (qe.remote) */
   intent_t rem;
   if (input_remote && input_remote(s, &rem)) {
+    if (rem.mx || rem.my || rem.block || rem.light || rem.heavy || rem.kick || rem.dodge || rem.special) pdev[s & 1] = DEV_PHONE;
     if (fabsf(rem.mx) > fabsf(P.mx)) P.mx = rem.mx;
     if (fabsf(rem.my) > fabsf(P.my)) P.my = rem.my;
     P.block = P.block || rem.block;

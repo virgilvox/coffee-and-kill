@@ -157,6 +157,25 @@ void stage_camera(v3 look_at, v3 *pos) {
   const stage_def *d = &STAGES[cur];
   if (d->kind == STK_WORKSHOP) {
     pos->x = ck_clamp(pos->x, -ROOM_HX + 1, ROOM_HX - 1); pos->z = ck_clamp(pos->z, -ROOM_HZ + 1, ROOM_HZ - 1);
+    /* and in front of the first prop between the fight and the lens (the slab test on each box) */
+    const t3_box3 *B; int n = arena_obstacles(&B);
+    float o[3] = {look_at.x, look_at.y, look_at.z}, dv[3] = {pos->x - look_at.x, pos->y - look_at.y, pos->z - look_at.z}, hit = 1;
+    for (int i = 0; i < n; i++) {
+      float lo[3] = {B[i].min.x, B[i].min.y, B[i].min.z}, hi[3] = {B[i].max.x, B[i].max.y, B[i].max.z}, t0 = 0, t1 = 1;
+      bool in = true;
+      for (int a = 0; a < 3 && in; a++) {
+        if (fabsf(dv[a]) < 1e-6f) { if (o[a] < lo[a] || o[a] > hi[a]) in = false; continue; }
+        float u = (lo[a] - o[a]) / dv[a], w = (hi[a] - o[a]) / dv[a];
+        if (u > w) { float x = u; u = w; w = x; }
+        t0 = fmaxf(t0, u); t1 = fminf(t1, w);
+        if (t0 > t1) in = false;
+      }
+      if (in && t0 > 0 && t0 < hit) hit = t0;
+    }
+    if (hit < 1) {
+      float k = fmaxf(hit - 0.04f, 0.35f);
+      pos->x = look_at.x + dv[0] * k; pos->y = look_at.y + dv[1] * k; pos->z = look_at.z + dv[2] * k;
+    }
     return;
   }
   if (!d->cam_clear) return;

@@ -687,6 +687,9 @@ static t3_box3 box_of(t3_object *F) {
   t3_object_traverse(F, box_expand, &b);
   return b;
 }
+/* the props a camera must not pass into: their world boxes, a little grown (the arms sway) */
+static t3_box3 posts[40]; static int nposts;
+int arena_obstacles(const t3_box3 **boxes) { *boxes = posts; return nposts; }
 static t3_object *prop(const char *name, prop_opt o) {
   char path[64]; snprintf(path, sizeof path, "%s.glb", name);
   size_t len; uint8_t *bytes = ck_asset(path, &len);
@@ -710,6 +713,12 @@ static t3_object *prop(const char *name, prop_opt o) {
   t3_object_set_position(QA, o.x, o.y, o.z);
   rot(QA, 0, o.ry, 0);
   if (o.has_rot) rot(QA, o.rot[0], o.rot[1], o.rot[2]);
+  if (BA.max.y - BA.min.y >= 1 && nposts < 40) {
+    t3_object_update_matrix_world(QA, true);
+    t3_box3 w = box_of(QA);
+    const float g = 0.35f;
+    posts[nposts++] = (t3_box3){{w.min.x - g, w.min.y, w.min.z - g}, {w.max.x + g, w.max.y + g, w.max.z + g}};
+  }
   return QA;
 }
 #define PROP(n, ...) prop(n, (prop_opt){.shadow = true, __VA_ARGS__})

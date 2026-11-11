@@ -59,6 +59,9 @@ const ck_pointer *input_pointer(void);
 enum { DEV_KEYS, DEV_PAD, DEV_MOUSE, DEV_PHONE };
 extern int input_last_dev;
 void input_note_dev(int dev);
+/* the device each side last fought with (input_poll sees it), from input_dev_reset at a match's start */
+int input_dev_of(int slot);
+void input_dev_reset(void);
 
 /* menu events by player, from the pads and the phone pads (the keyboard's are the screen's to
  * read, since its keys depend on the screen and the mode). Pad 0 is player 0 and pad 1 player

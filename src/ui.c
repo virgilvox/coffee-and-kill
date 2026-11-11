@@ -7,6 +7,7 @@
  * boxes read over the DevTools protocol). */
 #include "ui_int.h"
 #include "ui_kit.h"
+#include "ui_hint.h"
 #include "ck.h"
 #include "audio.h"
 #include "input.h"
@@ -342,7 +343,9 @@ static struct {
   struct { char big[64], small[96]; int mode; float t0; layer L; float h; int nl; } ann;
   struct { char s[96]; bool show; trans_t op; float until; layer L; float w; } toast;
   struct { bool live; float t0, x, y; layer L; float w, h; } fx[NFX];
-  char hint[200]; layer hintL; float hint_w;
+  char hint[200]; layer hintL; float hint_w, hint_h;
+  char xkey[2][24];             /* the EXTREME prompt's glyph per side (ui_hint.h), "" for none */
+  layer topL;                   /* the shade behind the HUD's top row */
   uint32_t flash_rgb; float flash_a0, flash_t0, flash_dur;
 } H;
 
@@ -413,14 +416,6 @@ static void paint_side(int i, float hp, float lag, float bright) {
     }
     c_rect(c, i == 0 ? mix : mix + miw - mfw, miy, mfw, 6, f);
   }
-  if (H.full[i]) {   /* the label, clipped to the 6 px padding box */
-    cv_save(c);
-    cv_begin(c); cv_rect(c, mix, miy, miw, 6); cv_clip(c);
-    const char *lab = "EXTREME READY (F)";
-    float tw = t_width(F_LCD, 13, 0, lab);
-    t_draw(c, F_LCD, 13, 0, mix + (miw - tw) / 2, t_base(F_LCD, 13, miy, 12), lab, COL(C_INK));
-    cv_restore(c);
-  }
   c_border(c, mx, my, mw, 12, 3, COL(C_INK));
 
   /* .pips: 22 x 16, gap 7, margin-top 9, border 3 cream, skewX(-14deg) each (both sides) */
@@ -434,6 +429,22 @@ static void paint_side(int i, float hp, float lag, float bright) {
     cv_set_transform(c, 1, 0, -kp, 1, -ox + kp * pcy, 0);
     if (p < H.pips_on[i]) c_rect(c, x, py, 22, 16, COL(i == 0 ? C_PINK : C_CYAN));
     c_border(c, x, py, 22, 16, 3, COL(C_CREAM));
+  }
+  /* a full meter: a tag beside the pips in the side's colour, with the button that throws it,
+   * pulsing with the bar */
+  if (H.full[i]) {
+    cv_set_transform(c, 1, 0, 0, 1, -ox, 0);
+    char t[48]; snprintf(t, sizeof t, "%s%sEXTREME READY", H.xkey[i], H.xkey[i][0] ? " " : "");
+    hint_style st = {15, 1.2f, COL(C_INK), NULL};
+    float tw = hint_width(&st, t) + 16, th = 26, tcy = py + 8;
+    float tx = i == 0 ? px0 + total + 14 : px0 - 14 - tw;
+    uint32_t bg = i == 0 ? C_PINK : C_CYAN;
+    if (bright > 1) {
+      uint32_t r = (uint32_t)fminf(255, ((bg >> 16) & 255) * bright), g = (uint32_t)fminf(255, ((bg >> 8) & 255) * bright), b = (uint32_t)fminf(255, (bg & 255) * bright);
+      bg = (r << 16) | (g << 8) | b;
+    }
+    c_box(c, tx, tcy - th / 2, tw, th, COL(bg), 2, COL(C_INK), 3, 3, COL(C_INK));
+    hint_paint(c, &st, tx + 8, tcy, t);
   }
   cv_reset_transform(c);
 }
@@ -540,11 +551,16 @@ static void paint_toast(void) {
   c_box(c, 0, 0, w, 55, COL(C_INK), 3, COL(C_PINK), 0, 0, COL(0));
   t_draw(c, F_LCD, 34, 0, 17, t_base(F_LCD, 34, 5, t_line(F_LCD, 34)), H.toast.s, COL(C_CREAM));
 }
+/* the fight's prompt: glyphs for the device in use (game.c picks the text) on a dark plate, so it
+ * reads over any floor */
 static void paint_hint(void) {
-  float tw = t_width(F_TYPE, 13, 1.82f, H.hint);
-  H.hint_w = tw;
-  L_ensure(&H.hintL, (int)ceilf(tw) + 4, 20);
-  if (H.hint[0]) t_draw_sh(H.hintL.c, F_TYPE, 13, 1.82f, 0, t_asc(F_TYPE, 13), H.hint, COLA(0xf5f0e6, 0.75f), &SH_HINT);
+  hint_style st = {15, 0.9f, COL(C_CREAM), &SH_HINT};
+  float tw = hint_width(&st, H.hint);
+  H.hint_w = ceilf(tw) + 24; H.hint_h = hint_h(15) + 10;
+  L_ensure(&H.hintL, (int)H.hint_w, (int)H.hint_h);
+  if (!H.hint[0]) return;
+  c_rect(H.hintL.c, 0, 0, H.hint_w, H.hint_h, COLA(0x0a0a0a, 0.62f));
+  hint_paint(H.hintL.c, &st, 12, H.hint_h / 2, H.hint);
 }
 
 /* ================================================================== API */
@@ -593,6 +609,11 @@ void ui_set_timer(float t) {
   if (strcmp(s, H.timer_s)) { strcpy(H.timer_s, s); H.timer_ok = false; }
 }
 void ui_set_round(const char *s) { if (strcmp(s, H.round)) { snprintf(H.round, sizeof H.round, "%s", s); H.round_ok = false; } }
+void ui_set_extreme_key(int i, const char *glyph) {
+  if (i < 0 || i > 1 || !glyph || !strcmp(H.xkey[i], glyph)) return;
+  snprintf(H.xkey[i], sizeof H.xkey[i], "%s", glyph);
+  H.side_ok[i] = false;
+}
 void ui_set_hint(const char *s) {
   char t[200]; t_collapse(t, s ? s : "", sizeof t);
   if (strcmp(t, H.hint)) { strcpy(H.hint, t); paint_hint(); }
@@ -658,6 +679,15 @@ void ui_frame(float dt) {
 bool ui_key_used(int i) { return i >= 0 && i < 64 && key_used[i]; }
 
 static void draw_hud(void) {
+  /* a shade behind the names and bars, so they read over the scene's signs */
+  if (!H.topL.c) {
+    L_ensure(&H.topL, 1, 190);
+    cv_fill_linear(H.topL.c, 0, 0, 0, 190);
+    cv_fill_stop(H.topL.c, 0, "rgba(10,10,10,0.62)"); cv_fill_stop(H.topL.c, 0.55f, "rgba(10,10,10,0.3)"); cv_fill_stop(H.topL.c, 1, "rgba(10,10,10,0)");
+    cv_fill_rect(H.topL.c, 0, 0, 1, 190);
+  }
+  L_upload(&H.topL);
+  { float m[6] = {CK_W, 0, 0, 1, 0, 0}; ov_draw_m(H.topL.t, m, 1, 1); }
   /* the sides: repaint when what they show moved */
   for (int i = 0; i < 2; i++) {
     float hp = tr_get(&H.hp[i], ui_now), lag = tr_get(&H.lag[i], ui_now);
@@ -719,7 +749,7 @@ static void draw_hud(void) {
     ov_draw(H.toast.L.t, 640 - H.toast.w / 2, CK_H - 0.09f * CK_H - 55, top_op);
   }
   /* .hint: bottom 14, centred */
-  if (H.hint[0] && H.hintL.c) { L_upload(&H.hintL); ov_draw(H.hintL.t, 640 - H.hint_w / 2, CK_H - 14 - 17, 1); }
+  if (H.hint[0] && H.hintL.c) { L_upload(&H.hintL); ov_draw(H.hintL.t, roundf(640 - H.hint_w / 2), CK_H - 12 - H.hint_h, 1); }
   /* .fx: @keyframes fxup .8s ease-out forwards: opacity 0 / 1 (15%) / 0, scale .5 / 1.2 (15%) / 1,
    * margin-top 10 -> -60; transform translate(-50%,-50%) rotate(-6deg); the scale property about the centre */
   for (int i = 0; i < NFX; i++) {
