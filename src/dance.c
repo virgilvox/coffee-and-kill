@@ -289,7 +289,8 @@ static void geometry(void) {
   float P = CK_W, e = CK_H;
   int w = D.np;
   G_ = fminf(P * (w == 2 ? 0.062f : 0.075f), e * 0.13f);
-  N_ = e * 0.2f; R_ = e * 0.74f; V_ = e * 2.2f;
+  /* the receptors sit under the header band (dance_draw); notes still enter at 0.94 of the height */
+  N_ = e * 0.23f; R_ = e * 0.71f; V_ = e * 2.2f;
   if (w == 2) { BX[0] = P * 0.17f; BX[1] = P * 0.83f; } else BX[0] = BX[1] = P * 0.5f;
 }
 
@@ -378,10 +379,14 @@ void dance_draw(void) {
   double Dt = song_time();
   float xe = D.xe;
   ov_begin();
-  /* a shade behind the header, the names and the scores, so they read over the stage's signs */
-  for (int k = 0; k < 16; k++) ov_fill(0, k * e * 0.0095f, P, e * 0.0095f + 0.5f, 0x0a0a0a, 0.62f * (1 - k / 16.f));
-  text_at(0, D.np == 1 ? "DANCE BREAK" : "DANCE BATTLE", F_MARKER, roundf(e * 0.055f), "#f2ab1e", P / 2, e * 0.075f, 1, "#c2542c", 5 * t);
-  text_at(1, D.track ? (Dt < 0 ? "GET READY" : D.track->name) : "", F_TYPE, roundf(e * 0.022f), "#a79d8c", P / 2, e * 0.125f, 1, NULL, 0);
+  /* The header is a band of its own above the lanes, so nothing in it lands on the stage's signs
+   * or on each other: the title, the song and its progress in the middle, each player's name over
+   * their score at the side (in one player, the left). */
+  float hb = e * 0.135f;
+  ov_fill(0, 0, P, hb, 0x0a0a0a, 0.8f);
+  for (int k = 0; k < 8; k++) ov_fill(0, hb + k * 3, P, 3, 0x0a0a0a, 0.8f * (1 - (k + 1) / 9.f));
+  text_at(0, D.np == 1 ? "DANCE BREAK" : "DANCE BATTLE", F_MARKER, roundf(e * 0.055f), "#f2ab1e", P / 2, e * 0.05f, 1, "#c2542c", 5 * t);
+  text_at(1, D.track ? (Dt < 0 ? "GET READY" : D.track->name) : "", F_TYPE, roundf(e * 0.022f), "#a79d8c", P / 2, e * 0.096f, 1, NULL, 0);
   if (Dt < 9 * xe) {
     float a = (float)(Dt / xe);
     const char *c = a < 2 ? "GET READY" : a < 4 ? "3" : a < 6 ? "2" : a < 8 ? "1" : "GO";
@@ -393,8 +398,8 @@ void dance_draw(void) {
     text_layer(2, key, paint_tx, &T, al, P / 2 - 640, e * 0.42f - 110);
   }
   float z = (float)fmax(0, fmin(1, Dt / ((8 + D.track->song_beats) * xe)));
-  ov_fill(P * 0.3f, e * 0.15f, P * 0.4f, 6 * t, C_CREAM, 0.18f);
-  ov_fill(P * 0.3f, e * 0.15f, P * 0.4f * z, 6 * t, C_PINK, 1);
+  ov_fill(P * 0.3f, e * 0.118f, P * 0.4f, 6 * t, C_CREAM, 0.18f);
+  ov_fill(P * 0.3f, e * 0.118f, P * 0.4f * z, 6 * t, C_PINK, 1);
   ov_draw(D.lanes, 0, 0, 1);
   float f = e * 0.98f;
   for (int c = 0; c < D.np; c++) {
@@ -408,9 +413,10 @@ void dance_draw(void) {
       float hw = 2 * G_ * o_(E);
       ov_fill(Q - hw, E - 0.75f, hw * 2, 1.5f, C_CREAM, 0.07f);
     }
-    text_at(3 + c * 4, a->d.name, F_MARKER, roundf(e * 0.034f), "#ece3d3", Q, e * 0.2f - G_ * 0.8f, 1, NULL, 0);
+    float hx = D.np == 2 ? Q : P * 0.17f;   /* the player's corner of the header band */
+    text_at(3 + c * 4, a->d.name, F_MARKER, roundf(e * 0.034f), "#ece3d3", hx, e * 0.045f, 1, NULL, 0);
     char sc[16]; snprintf(sc, sizeof sc, "%05d", a->score);
-    text_at(4 + c * 4, sc, F_LCD, roundf(e * 0.03f), "#f2ab1e", Q, e * 0.2f - G_ * 0.8f + e * 0.04f, 1, NULL, 0);
+    text_at(4 + c * 4, sc, F_LCD, roundf(e * 0.03f), "#f2ab1e", hx, e * 0.095f, 1, NULL, 0);
     for (int T = 0; T < 4; T++) {
       draw_arrow(j_(c, (float)T, N_), N_, G_ * 0.95f, T, true, a->flash[T]);
       float g = a->flash[T];

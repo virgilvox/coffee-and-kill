@@ -1440,7 +1440,7 @@ static void showroom_frame(void) {
 void game_init(void) {
   memset(&G, 0, sizeof G);
   G.phase = PH_LOAD; G.mode = 1; G.dance_on = true; G.last_track = -1; G.ko_winner = -1; G.slow = 1;
-#ifdef CK_TEST_ROUND
+#if defined(CK_TEST_ROUND) && !defined(CK_TEST_DANCE)   /* CK_TEST_DANCE: short rounds, but dance */
   G.dance_on = false;
 #endif
   snprintf(G.sel.slots[0].ch, 12, "moheeb"); snprintf(G.sel.slots[0].weapon, 12, "pipe");
