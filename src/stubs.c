@@ -18,6 +18,7 @@ W void sfx_kick(void) {}
 W void sfx_shock(void) {}
 W void sfx_ko(void) {}
 W void sfx_bell(void) {}
+W void voice_say(const char *n) { (void)n; }
 W void sfx_ui(void) {}
 W void sfx_ui_ok(void) {}
 W void sfx_step(void) {}

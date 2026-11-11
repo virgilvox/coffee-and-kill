@@ -32,6 +32,7 @@ void sfx_kick(void);
 void sfx_shock(void);
 void sfx_ko(void);
 void sfx_bell(void);
+void voice_say(const char *name);   /* a fighter's spoken line, by "<fighter>.hi" or "<fighter>.win" */
 void sfx_ui(void);
 void sfx_ui_ok(void);
 void sfx_step(void);

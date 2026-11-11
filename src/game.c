@@ -322,6 +322,13 @@ static void start_match(void) {
   start_round();
 }
 
+/* a fighter's spoken line: "<key>.hi" at the round's start, "<key>.win" when they take the match */
+static void say_fighter(int side, const char *sit) {
+  if (side < 0 || side > 1 || !G.f[side]) return;
+  char nm[24]; snprintf(nm, sizeof nm, "%s.%s", roster_get(G.f[side]->ri)->key, sit);
+  voice_say(nm);
+}
+
 static void start_round(void) {
   place_fighters();
   for (int i = 0; i < 2; i++) { G.f[i]->hp = 100; G.f[i]->meter = fminf(G.f[i]->meter, 0); }
@@ -343,6 +350,7 @@ static void start_round(void) {
   else if (G.in_tourney && G.round == 1 && (G.cpu[0] != G.cpu[1])) snprintf(sub, sizeof sub, "%s ON ANY PAD", G.label[G.cpu[0] ? 1 : 0]);
   gui_announce(r, sub);
   sfx_bell(); music_set_level(1);
+  if (G.round == 1) say_fighter(0, "hi");   /* P1 opens; P2 answers at the FIGHT beat */
 }
 
 /* who took the round, under the banner, once the K.O. has landed (or TIME UP has had its moment) */
@@ -378,7 +386,7 @@ static void finish_match(void) {
     else if (G.cpu[0] || G.cpu[1]) snprintf(sub, sizeof sub, !G.cpu[D] ? "%s IS YOURS" : "%s WINS THIS ONE", where);
     else snprintf(sub, sizeof sub, "PLAYER %d TAKES %s", D + 1, where);
     gui_set_end(fname(D), true, sub);
-    sfx_win();
+    sfx_win(); say_fighter(D, "win");
   }
   gui_show("s-end"); G.phase = PH_MATCHEND; gui_clear_announce();
 }
@@ -616,7 +624,7 @@ static void phase_logic(float A) {
   fighter *P = G.f[0], *e = G.f[1];
   switch (G.phase) {
     case PH_INTRO:
-      if (G.intro_stage == 0 && G.phase_t > 1.4f) { G.intro_stage = 1; gui_announce("FIGHT!", ""); sfx_fight(); }
+      if (G.intro_stage == 0 && G.phase_t > 1.4f) { G.intro_stage = 1; gui_announce("FIGHT!", ""); sfx_fight(); if (G.round == 1) say_fighter(1, "hi"); }
       if (G.phase_t > 2) { G.phase = PH_FIGHT; G.phase_t = 0; }
       break;
     case PH_FIGHT:

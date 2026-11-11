@@ -37,28 +37,50 @@ static variant_t *var; static int nvar;
 static short *pcm; static uint32_t npcm;
 typedef struct { const short *p; uint32_t n, pos; } voice_t;
 #define MAXV 48
+#define VSAY (MAXV - 1)   /* the last slot is kept for a fighter's spoken line, one at a time */
 static voice_t voices[MAXV];
+
+/* the fighters' spoken lines: a second bank in the same shape as the SFX one (lines_index.bin +
+ * lines.flac), played on the reserved VSAY slot so a line is never cut by a sound effect */
+static variant_t *lvar; static int nlvar; static short *lpcm; static uint32_t nlpcm;
 
 void (*sfx_tap)(const char *name, float arg);
 
-static void load_sfx(void) {
-  size_t n; uint8_t *idx = ck_asset("sfx_index.bin", &n);
+/* a CKSI index plus its mono FLAC into a bank (variants and the s16 pcm, half level) */
+static void load_bank(const char *index, const char *flac, variant_t **vp, int *np, short **pp, uint32_t *cp) {
+  size_t n; uint8_t *idx = ck_asset(index, &n);
   if (!idx || n < 8 || memcmp(idx, "CKSI", 4)) { free(idx); return; }
   uint32_t c; memcpy(&c, idx + 4, 4);
-  var = calloc(c, sizeof *var);
+  variant_t *v = calloc(c, sizeof *v);
   const uint8_t *q = idx + 8;
   for (uint32_t i = 0; i < c; i++) {
     int l = *q++;
-    memcpy(var[i].name, q, l < 11 ? l : 11); q += l;
-    memcpy(&var[i].arg, q, 4); memcpy(&var[i].start, q + 4, 4); memcpy(&var[i].frames, q + 8, 4); q += 12;
+    memcpy(v[i].name, q, l < 11 ? l : 11); q += l;
+    memcpy(&v[i].arg, q, 4); memcpy(&v[i].start, q + 4, 4); memcpy(&v[i].frames, q + 8, 4); q += 12;
   }
-  nvar = (int)c; free(idx);
-  size_t m; uint8_t *b = ck_asset("sfx.flac", &m);
+  *vp = v; *np = (int)c; free(idx);
+  size_t m; uint8_t *b = ck_asset(flac, &m);
   if (!b) return;
   unsigned ch, rate; drflac_uint64 total = 0;
-  pcm = drflac_open_memory_and_read_pcm_frames_s16(b, m, &ch, &rate, &total, NULL);   /* mono, stored at half level */
-  npcm = pcm && ch == 1 ? (uint32_t)total : 0;
+  *pp = drflac_open_memory_and_read_pcm_frames_s16(b, m, &ch, &rate, &total, NULL);
+  *cp = *pp && ch == 1 ? (uint32_t)total : 0;
   free(b);
+}
+
+static void load_sfx(void) {
+  load_bank("sfx_index.bin", "sfx.flac", &var, &nvar, &pcm, &npcm);
+  load_bank("lines_index.bin", "lines.flac", &lvar, &nlvar, &lpcm, &nlpcm);
+}
+
+/* a fighter's line: pick a variant of name at random, play it on the reserved slot */
+void voice_say(const char *name) {
+  if (!lpcm || !name) return;
+  int best[8], nb = 0;
+  for (int i = 0; i < nlvar; i++) if (!strcmp(lvar[i].name, name) && nb < 8) best[nb++] = i;
+  if (!nb) return;
+  const variant_t *v = &lvar[best[nb > 1 ? (int)(ck_rand() * nb) % nb : 0]];
+  if (v->start + v->frames > nlpcm) return;
+  voices[VSAY].p = lpcm + v->start; voices[VSAY].n = v->frames; voices[VSAY].pos = 0;
 }
 
 /* one variant of name (with the arg nearest to arg), picked at random among its renders */
@@ -74,7 +96,7 @@ static void play(const char *name, float arg) {
   const variant_t *v = &var[best[nb > 1 ? (int)(ck_rand() * nb) % nb : 0]];
   if (v->start + v->frames > npcm) return;
   int slot = -1; uint32_t most = 0;
-  for (int i = 0; i < MAXV; i++) { if (!voices[i].p) { slot = i; break; } if (voices[i].pos >= most) { most = voices[i].pos; slot = i; } }
+  for (int i = 0; i < VSAY; i++) { if (!voices[i].p) { slot = i; break; } if (voices[i].pos >= most) { most = voices[i].pos; slot = i; } }
   voices[slot].p = pcm + v->start; voices[slot].n = v->frames; voices[slot].pos = 0;
 }
 
