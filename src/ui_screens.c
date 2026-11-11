@@ -141,7 +141,7 @@ void chip_paint(cv *c, float x, float y, const char *s, bool on) {
   t_draw(c, F_TYPE, 14, 2.24f, x + 13, t_base(F_TYPE, 14, y + 8, 18), s, on ? COL(C_CREAM) : COL(C_INK));
 }
 /* .lab: type 13, ls .2em */
-void lab_paint(cv *c, float x, float top, const char *s) { t_draw(c, F_TYPE, 13, 2.6f, x, top + t_asc(F_TYPE, 13), s, COL(C_INK)); }
+void lab_paint(cv *c, float x, float top, const char *s) { t_draw(c, F_TYPE, 14, 2.2f, x, top + t_asc(F_TYPE, 14) - 1, s, COL(C_INK)); }
 void focus_ring(cv *c, float x, float y, float w, float h) {   /* outline: 3px dashed pink, offset 2 */
   c_dash_rect(c, x - 5, y - 5, w + 10, h + 10, 3, COL(C_PINK));
 }
@@ -237,10 +237,10 @@ static void title_init(void) {
                    "Factory kits (CC0). From KEYHOLDER: characters from the VRoid Project samples, the lab from the "
                    "HSL-108 model, downtown Mesa from OpenStreetMap contributors and BikeMesa. Engine: three.js by way "
                    "of three.c, and wasmcart.";
-  char ln[6][160]; int n = t_wrap(F_TYPE, 13, 0.6f, cr, 560, false, ln, 6);
+  char ln[6][160]; int n = t_wrap(F_TYPE, 14, 0, cr, 600, false, ln, 6);
   for (int k = 0; k < n; k++) {
-    float w = t_width(F_TYPE, 13, 0.6f, ln[k]);
-    t_draw(title_L.c, F_TYPE, 13, 0.6f, CK_W - 20 - w, CK_H - 14 - (n - 1 - k) * 18, ln[k], COLA(0xf5f0e6, 0.7f));
+    float w = t_width(F_TYPE, 14, 0, ln[k]);
+    t_draw(title_L.c, F_TYPE, 14, 0, CK_W - 20 - w, CK_H - 14 - (n - 1 - k) * 19, ln[k], COLA(0xf5f0e6, 0.75f));
   }
 }
 
@@ -395,8 +395,8 @@ static void online_paint(void) {
   ui_online_t *o = &ui_online;
   nol_ctl = 0; nhits = 0;
   /* the vertical stack: h2 41 (mb 10), rows 41 / 41 / 34 (m 8), olstat (m 10), linkrow 41 (m 8), ollist (mt 6), olch 60 (mt 12) */
-  char st[4][160]; int ns = t_wrap(F_TYPE, 13, 1.82f, o->status, 628, false, st, 4);
-  float sth = fmaxf(18, ns * 17.f);
+  char st[4][160]; int ns = t_wrap(F_TYPE, 14, 1.4f, o->status, 628, false, st, 4);
+  float sth = fmaxf(19, ns * 19.f);
   bool nobody = o->link_row && o->npeers == 0;
   float listh = 0;
   if (nobody) listh = 18 + 20;   /* an .olstat inside the list: its margins 10 0 stay inside the flex box */
@@ -423,7 +423,7 @@ static void online_paint(void) {
   t_draw(c, F_MARKER, 30, 0, cx, t_base(F_MARKER, 30, cy + y_h2, 30), "ONLINE VERSUS", COL(C_INK));
   c_rect(c, cx, cy + y_h2 + 38, 628, 3, COL(C_INK));
   /* NAME */
-  float lw = t_width(F_TYPE, 13, 2.6f, "NAME");
+  float lw = t_width(F_TYPE, 14, 2.2f, "NAME");
   lab_paint(c, cx, cy + y_r1 + 12, "NAME");
   float fx = cx + lw + 10;
   input_paint(c, fx, cy + y_r1, 628 - lw - 10, o->name, o->focus == 1, o->focus == 1 ? &ol_caret_x : NULL);
@@ -468,7 +468,7 @@ static void online_paint(void) {
     t_draw(c, F_TYPE, 14, 0.6f, cx, cy + y_nt + t_asc(F_TYPE, 14) - 2, note, COLA(C_INK, 0.7f));
   }
   /* status */
-  for (int k = 0; k < ns; k++) t_draw(c, F_TYPE, 13, 1.82f, cx, cy + y_st + k * 17 + t_asc(F_TYPE, 13), st[k], COL(C_INK));
+  for (int k = 0; k < ns; k++) t_draw(c, F_TYPE, 14, 1.4f, cx, cy + y_st + k * 19 + t_asc(F_TYPE, 14), st[k], COL(C_INK));
   /* LINK + COPY LINK */
   if (o->link_row) {
     lab_paint(c, cx, cy + y_lk + 12, "LINK");
@@ -479,7 +479,7 @@ static void online_paint(void) {
   }
   /* the peers */
   float py = cy + y_ls;
-  if (nobody) t_draw(c, F_TYPE, 13, 1.82f, cx, py + 10 + t_asc(F_TYPE, 13), "NOBODY ELSE HERE YET.", COL(C_INK));
+  if (nobody) t_draw(c, F_TYPE, 14, 1.4f, cx, py + 10 + t_asc(F_TYPE, 14), "NOBODY ELSE HERE YET.", COL(C_INK));
   for (int i = 0; i < o->npeers; i++) {
     float h = o->peers[i].busy ? 46 : 56;
     c_box(c, cx, py, 628, h, COL(C_PAPER), 3, COL(C_INK), 0, 0, COL(0));
@@ -489,7 +489,7 @@ static void online_paint(void) {
     const char *wn = wk >= 0 ? WEAPONS[wk].name : "?";
     if (fk >= 0) snprintf(wp, sizeof wp, "%s, %s%s", ROSTER[fk].name, wn, o->peers[i].busy ? " IN A FIGHT" : "");
     else snprintf(wp, sizeof wp, "%s%s", wn, o->peers[i].busy ? " IN A FIGHT" : "");
-    float pw = t_width(F_TYPE, 12, 1.68f, wp);
+    float pw = t_width(F_TYPE, 14, 0.7f, wp);
     float right = cx + 628 - 15;
     if (!o->peers[i].busy) {
       float wc = chip_w("CHALLENGE");
@@ -497,7 +497,7 @@ static void online_paint(void) {
       ol_ctl[nol_ctl++] = (hit_t){right - wc, mid - 17, wc, 34, H_CH, i, 0, ""};
       right -= wc + 10;
     }
-    t_draw(c, F_TYPE, 12, 1.68f, right - pw, mid - 7.5f + t_asc(F_TYPE, 12), wp, COLA(C_INK, 0.7f));
+    t_draw(c, F_TYPE, 14, 0.7f, right - pw, mid - 8.5f + t_asc(F_TYPE, 14), wp, COLA(C_INK, 0.75f));
     py += h + 8;
   }
   /* the challenge banner */
@@ -538,8 +538,10 @@ static void pads_paint(void) {
   t_draw(c, F_MARKER, 30, 0, cx, t_base(F_MARKER, 30, cy, 30), "PHONE PADS", COL(C_INK));
   c_rect(c, cx, cy + 38, 628, 3, COL(C_INK));
   /* #pd-help, as Chrome wraps it */
-  t_draw(c, F_TYPE, 13, 1.82f, cx, cy + 51 + t_asc(F_TYPE, 13), "Open the link on a phone and it becomes a controller instead of", COL(C_INK));
-  t_draw(c, F_TYPE, 13, 1.82f, cx, cy + 68 + t_asc(F_TYPE, 13), "the game. First pad is P1, add &p=2 for P2.", COL(C_INK));
+  {
+    char pl[3][160]; int np = t_wrap(F_TYPE, 14, 0.7f, "Open the link on a phone and it becomes a controller instead of the game. The first phone is P1; add &p=2 to the link for P2.", 628, false, pl, 3);
+    for (int k = 0; k < np && k < 2; k++) t_draw(c, F_TYPE, 14, 0.7f, cx, cy + 51 + k * 18 + t_asc(F_TYPE, 14), pl[k], COL(C_INK));
+  }
   float ry = cy + 95;
   /* #pd-qr: 180 square, white, border 4, padding 6; the svg's viewBox -2 -2 n+4 n+4, crisp edges */
   float qy = ry + (row_h - 180) / 2;

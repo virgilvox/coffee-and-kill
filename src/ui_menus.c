@@ -512,7 +512,7 @@ static void champ_paint(void) {
   t_draw(c, F_TYPE, 16, 2.88f, cx, y + t_asc(F_TYPE, 16), l, COL(C_INK));
   y += 22 + 8;
   snprintf(l, sizeof l, "%d ENTRANTS, %d MATCHES, ROUNDS %d TO %d", t->size, tourney_rounds(t), won, lost);
-  t_draw(c, F_TYPE, 13, 1.82f, cx, y + t_asc(F_TYPE, 13), l, COLA(C_INK, 0.75f));
+  t_draw(c, F_TYPE, 14, 1.4f, cx, y + t_asc(F_TYPE, 14), l, COLA(C_INK, 0.8f));
   y += 20 + 18;
   static const char *lab[2] = {"NEW TOURNEY", "MAIN MENU"}, *ac[2] = {"tnew", "quit"};
   for (int i = 0; i < 2; i++) {
