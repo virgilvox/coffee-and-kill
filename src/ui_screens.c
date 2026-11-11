@@ -9,6 +9,7 @@
  * the numbers in comments are Chrome's for the same content. */
 #include "ui_int.h"
 #include "ui_kit.h"
+#include "ui_hint.h"
 #include "weapons.h"
 #include "roster.h"
 #include "stage.h"
@@ -25,7 +26,6 @@ typedef struct { int kind, font; float fs, ls, x, y, w, h; uint32_t rgb; float a
 enum { OP_RECT, OP_DASH, OP_TEXT, OP_MARK };
 #include "ui_static_title.h"
 #include "ui_static_pause.h"
-#include "ui_static_controls.h"
 
 const char *scr_cur;
 ck_sel *scr_sel; int scr_mode = 1;
@@ -220,6 +220,7 @@ static void load_draw(void) {
 /* ================================================================== title */
 static layer title_L;
 static btn_t title_b[6];
+static int title_last;
 static void title_init(void) {
   /* the menu, after .wrap's translateY(-52%) (-277.55) */
   float y0 = 673.75f - 277.55f;
@@ -230,7 +231,17 @@ static void title_init(void) {
   btn_init(&title_b[4], 76.8f, y0 + 232, 208, 46, 24, 12, 6, BTN_GHOST, "PHONE PADS", "pads");
   btn_init(&title_b[5], 298.8f, y0 + 232, 208, 46, 24, 12, 6, BTN_GHOST, "CONTROLS", "controls");
   L_ensure(&title_L, CK_W, CK_H);
-  draw_ops(title_L.c, STATIC_TITLE, sizeof STATIC_TITLE / sizeof STATIC_TITLE[0], 0, 0);
+  /* the page's title, without its credit lines (the last three ops): this cart has more to credit */
+  draw_ops(title_L.c, STATIC_TITLE, sizeof STATIC_TITLE / sizeof STATIC_TITLE[0] - 3, 0, 0);
+  const char *cr = "Animations: Quaternius Universal Animation Library 1 and 2 (CC0). Props: Kenney Survival and "
+                   "Factory kits (CC0). From KEYHOLDER: characters from the VRoid Project samples, the lab from the "
+                   "HSL-108 model, downtown Mesa from OpenStreetMap contributors and BikeMesa. Engine: three.js by way "
+                   "of three.c, and wasmcart.";
+  char ln[6][160]; int n = t_wrap(F_TYPE, 13, 0.6f, cr, 560, false, ln, 6);
+  for (int k = 0; k < n; k++) {
+    float w = t_width(F_TYPE, 13, 0.6f, ln[k]);
+    t_draw(title_L.c, F_TYPE, 13, 0.6f, CK_W - 20 - w, CK_H - 14 - (n - 1 - k) * 18, ln[k], COLA(0xf5f0e6, 0.7f));
+  }
 }
 
 /* ================================================================== pause / end */
@@ -301,6 +312,59 @@ void scr_end_changed(const char *name, bool wins, const char *sub) {
 
 /* ================================================================== controls */
 static layer controls_L;
+/* the controls card: the fight's keys for one and two players and the pad's buttons, then the
+ * menus' buttons, every key and button drawn as a glyph (ui_hint.h) */
+#define CT_X 190
+#define CT_Y 60
+#define CT_W 900
+#define CT_H 600
+static btn_t ct_ok;
+static void controls_paint(void) {
+  L_ensure(&controls_L, CK_W, CK_H);
+  cv *c = controls_L.c;
+  c_box(c, CT_X, CT_Y, CT_W, CT_H, COL(C_CREAM), 4, COL(C_INK), 8, 8, COL(C_PINK));
+  float x = CT_X + 26, y = CT_Y + 22, IW = CT_W - 52;
+  t_draw(c, F_MARKER, 30, 0, x, y + 28, "CONTROLS", COL(C_INK));
+  c_rect(c, x, y + 38, IW, 3, COL(C_INK));
+  static const char *act[7] = {"MOVE", "LIGHT", "HEAVY", "KICK", "BLOCK (HOLD)", "DODGE", "EXTREME"};
+  static const char *one[7] = {"[W][A][S][D] OR ARROWS", "[Q] [J] [Z]", "[E] [K] [X]", "[R] [L] [C]", "[SPACE] [U] [V]", "[SHIFT] [I]", "[F] [O] [B]"};
+  static const char *p1[7] = {"[W][A][S][D]", "[Q]", "[E]", "[R]", "[SPACE]", "[L-SHIFT]", "[F]"};
+  static const char *p2[7] = {"ARROWS", "[,]", "[.]", "[/]", "[R-SHIFT]", "[ENTER]", "[']"};
+  static const char *pad[7] = {"{STICK} OR {DPAD}", "{X}", "{Y}", "{B}", "{LB} {RB} {LT}", "{A}", "{RT}"};
+  float col[5] = {x, x + 150, x + 400, x + 545, x + 690};
+  static const char *head[5] = {"", "ONE PLAYER", "P1 OF TWO", "P2 OF TWO", "A PAD"};
+  hint_style st = {14, 0.3f, COL(C_INK), NULL};
+  float ty = y + 66;
+  for (int k = 1; k < 5; k++) t_draw(c, F_TYPE, 14, 2, col[k], ty, head[k], COLA(C_INK, 0.7f));
+  ty += 12;
+  for (int r = 0; r < 7; r++) {
+    float ry = ty + r * 34, cy = ry + 17;
+    c_rect(c, x, ry, IW, 2, COLA(C_INK, 0.12f));
+    t_draw(c, F_TYPE, 15, 1.5f, col[0], cy + 5, act[r], COL(C_INK));
+    hint_paint(c, &st, col[1], cy, one[r]);
+    hint_paint(c, &st, col[2], cy, p1[r]);
+    hint_paint(c, &st, col[3], cy, p2[r]);
+    hint_paint(c, &st, col[4], cy, pad[r]);
+  }
+  ty += 7 * 34 + 14;
+  c_rect(c, x, ty, IW, 3, COL(C_INK));
+  ty += 30;
+  t_draw(c, F_TYPE, 15, 1.5f, x, ty + 5, "MENUS", COL(C_INK));
+  hint_paint(c, &st, col[1], ty, "{STICK} MOVE  {A} PICK  {B} BACK  {Y} SWAP SIDES  {LB}{RB} COLOUR  {START} GO");
+  ty += 34;
+  hint_paint(c, &st, col[1], ty, "ARROWS MOVE  [ENTER] PICK  [ESC] BACK  [TAB] SWAP SIDES  [E] COLOUR  [P] PAUSE");
+  ty += 34;
+  hint_paint(c, &st, col[1], ty, "[M] MUTE  [N] MUSIC  <CLICK> PICK  <RIGHT CLICK> BACK");
+  ty += 30;
+  const char *note = "In one player every pad drives P1; in two players pad 1 is P1 and pad 2 is P2. Phones join as pads "
+                     "from PHONE PADS. Chain light hits for a three hit string, kicks break guards, and hits fill the "
+                     "EXTREME meter.";
+  char ln[4][160]; int n = t_wrap(F_TYPE, 14, 0, note, IW - 220, false, ln, 4);
+  for (int k = 0; k < n; k++) t_draw(c, F_TYPE, 14, 0, x, ty + 14 + k * 19, ln[k], COLA(C_INK, 0.85f));
+  btn_init(&ct_ok, CT_X + CT_W - 26 - 190, CT_Y + CT_H - 26 - 57, 190, 57, 32, 22, 8, BTN_NORMAL, "GOT IT", "back");
+  ct_ok.center = true;
+  btn_paint_at(c, &ct_ok, 0, 0, 0);
+}
 
 /* ================================================================== back button */
 btn_t back_b;   /* .btn.ghost.back at (20, 20): BACK, marker 32, padding 8 22 6 */
@@ -463,7 +527,7 @@ static void pads_paint(void) {
   /* .pdinfo: max-width 360; the code (marker 56, ls .08em, lh 1), the url and status (lcd 16, break-all) */
   char ul[6][160], sl[6][160], url[160], stt[160];
   t_collapse(url, p->url, sizeof url); t_collapse(stt, p->st, sizeof stt);   /* white-space: normal */
-  int nu = t_wrap(F_LCD, 16, 0, url, 360, true, ul, 6), nsl = t_wrap(F_LCD, 16, 0, stt, 360, true, sl, 6);
+  int nu = t_wrap(F_LCD, 16, 0, url, 360, true, ul, 6), nsl = t_wrap(F_LCD, 16, 0, stt, 360, false, sl, 6);   /* the status by words (the URL may break anywhere) */
   float info_h = 17 + 56 + 17 + nu * 21 + 6 + 34 + 8 + 17 + nsl * 21;
   float row_h = fmaxf(180, info_h);
   float H = 4 + 18 + 41 + 10 + 34 + 10 + row_h + 18 + 4;
@@ -522,8 +586,7 @@ void scr_init(void) {
   shades_init();
   title_init();
   pause_init();
-  L_ensure(&controls_L, CK_W, CK_H);
-  draw_ops(controls_L.c, STATIC_CONTROLS, sizeof STATIC_CONTROLS / sizeof STATIC_CONTROLS[0], 0, 0);
+  controls_paint();
   btn_init(&back_b, 20, 20, t_width(F_MARKER, 32, 0.64f, "BACK") + 52, 57, 32, 22, 8, BTN_GHOST, "BACK", "back");
   tr_jump(&LD.bar, 0);
   snprintf(LD.msg, sizeof LD.msg, "unpacking the hackerspace"); load_paint_msg();
@@ -537,9 +600,9 @@ void scr_show(const char *id) {
   if (!id || strcmp(id, "s-load")) LD.vs = false;
   if (!id) return;
   if (!strcmp(id, "s-title") || !strcmp(id, "s-pause") || !strcmp(id, "s-end")) {
-    scr_menu_idx = 0;
+    scr_menu_idx = !strcmp(id, "s-title") ? title_last : 0;   /* the title keeps the item you left it from */
     int n; btn_t *b = menu_btns(&n);
-    for (int i = 0; i < n; i++) { b[i].sel = i == 0; tr_jump(&b[i].t, i == 0 ? 1 : 0); b[i].painted = -1; }
+    for (int i = 0; i < n; i++) { b[i].sel = i == scr_menu_idx; tr_jump(&b[i].t, i == scr_menu_idx ? 1 : 0); b[i].painted = -1; }
   }
   kbd_nav = input_last_dev != DEV_MOUSE;   /* a pad or the keys: the focus shows from the start */
   if (menus_owns(id)) { menus_show(id); return; }
@@ -692,6 +755,7 @@ void scr_key(int e) {
   else if (e == WC_KEY_DOWN || e == WC_KEY_S) { scr_menu_idx = (scr_menu_idx + 1) % n; update_menu_sel(); sfx_ui(); }
   else if (e == WC_KEY_ENTER || e == WC_KEY_KP_ENTER || e == WC_KEY_SPACE) {
     sfx_ui_ok();
+    if (!strcmp(P, "s-title")) title_last = scr_menu_idx;
     act(t[scr_menu_idx].act);   /* t[idx].click(): the click handler plays uiOk again */
   }
 }
@@ -706,13 +770,12 @@ void scr_pointer(float x, float y, bool pressed) {
   for (int i = 0; i < n; i++) if (btn_hit(&b[i], x, y) && i != scr_menu_idx) { scr_menu_idx = i; update_menu_sel(); }
   if (menus_owns(P)) { menus_pointer(x, y, pressed); return; }
   if (!pressed) return;
-  for (int i = 0; i < n; i++) if (btn_hit(&b[i], x, y)) { act(b[i].act); return; }
+  for (int i = 0; i < n; i++) if (btn_hit(&b[i], x, y)) { if (!strcmp(P, "s-title")) title_last = i; act(b[i].act); return; }
   if (!strcmp(P, "s-online") || !strcmp(P, "s-pads")) {
     if (btn_hit(&back_b, x, y)) { act(!strcmp(P, "s-online") ? "onback" : "padsback"); return; }
   }
   if (!strcmp(P, "s-controls")) {
-    /* GOT IT: .rowbtns .btn at the card's bottom left (Chrome: 236, 568, 172 x 57) */
-    if (x >= 236 && x < 408 && y >= 568 && y < 625) act("back");
+    if (btn_hit(&ct_ok, x, y)) act("back");
     return;
   }
   if (!strcmp(P, "s-online")) {

@@ -371,12 +371,13 @@ static void finish_match(void) {
   else {
     int D = A ? 0 : 1;
     char sub[64];
+    const char *where = STAGES[stage_current() >= 0 ? stage_current() : 0].where;
     if (G.net_role) {
-      if (G.has_online_names) snprintf(sub, sizeof sub, "%s TAKES THE SHOP", G.online_names[D]);
+      if (G.has_online_names) snprintf(sub, sizeof sub, "%s TAKES %s", G.online_names[D], where);
       else snprintf(sub, sizeof sub, "ONLINE VERSUS");
-    } else if (G.cpu[0] && G.cpu[1]) snprintf(sub, sizeof sub, "THE CPU TAKES THE SHOP");
-    else if (G.cpu[0] || G.cpu[1]) snprintf(sub, sizeof sub, !G.cpu[D] ? "THE SHOP IS YOURS" : "THE SHOP WINS THIS ONE");
-    else snprintf(sub, sizeof sub, "PLAYER %d TAKES THE SHOP", D + 1);
+    } else if (G.cpu[0] && G.cpu[1]) snprintf(sub, sizeof sub, "THE CPU TAKES %s", where);
+    else if (G.cpu[0] || G.cpu[1]) snprintf(sub, sizeof sub, !G.cpu[D] ? "%s IS YOURS" : "%s WINS THIS ONE", where);
+    else snprintf(sub, sizeof sub, "PLAYER %d TAKES %s", D + 1, where);
     gui_set_end(fname(D), true, sub);
     sfx_win();
   }
@@ -431,7 +432,7 @@ static void start_dance(void) {
   trail_clear(A->trail); trail_clear(P->trail);
   G.cam_snap = true; G.dance_idle_t[0] = G.dance_idle_t[1] = 0;
   bool e = !G.net_role && humans() == 1;
-  gui_announce(e ? "DANCE BREAK" : "DANCE BATTLE", e ? "GRADE TO CHARGE EXTREME. ESC SKIPS" : "HIT THE ARROWS");
+  gui_announce(e ? "DANCE BREAK" : "DANCE BATTLE", e ? (input_dev_of(0) == DEV_PAD ? "GRADE TO CHARGE EXTREME. B SKIPS" : input_dev_of(0) == DEV_PHONE ? "GRADE TO CHARGE EXTREME" : "GRADE TO CHARGE EXTREME. ESC SKIPS") : "HIT THE ARROWS");
   announce_clear_at = ck_now() + 1.8;
   dance_begin(G.dance_seed);
 }

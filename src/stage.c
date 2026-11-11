@@ -13,21 +13,21 @@
 #define ARENA(st) .kind = STK_KH_ARENA, .ring = 4.45f, .kh_stage = st
 #define TOWN(pl, hr) .kind = STK_KH_TOWN, .ring = 4.45f, .place = pl, .hour = hr
 const stage_def STAGES[] = {
-  {"workshop", "THE WORKSHOP", "Robot arms, cogs and an Arduino Mega the size of a wall.", WORKSHOP(.cam_clear = 0)},
+  {"workshop", "THE WORKSHOP", "Robot arms, cogs and an Arduino Mega the size of a wall.", "THE SHOP", WORKSHOP(.cam_clear = 0)},
   /* the lab is narrow and full: the fight runs down the open floor by the electronics bench, the
    * ring is an ellipse that keeps off the tables, and the lens sits up over them */
 #ifdef CK_TEST_LABX
-  {"lab", "THE LAB", "test", .kind = STK_KH_LAB, .ring = 3.2f, .ring_z = 0.9f, .lab_x = CK_TEST_LABX, .lab_z = 4.7f, .yaw = -1.5708f, .hour = 15.5f, .cam_lift = 0.75f, .cam_max = 4.6f, .cam_clear = 1, .cam_side = true},
+  {"lab", "THE LAB", "test", "THE LAB", .kind = STK_KH_LAB, .ring = 3.2f, .ring_z = 0.9f, .lab_x = CK_TEST_LABX, .lab_z = 4.7f, .yaw = -1.5708f, .hour = 15.5f, .cam_lift = 0.75f, .cam_max = 4.6f, .cam_clear = 1, .cam_side = true},
 #else
-  {"lab", "THE LAB", "HSL-108 on a weekday afternoon, down the open floor by the electronics bench.", .kind = STK_KH_LAB, .ring = 3.2f, .ring_z = 0.9f, .lab_x = 25, .lab_z = 4.7f, .yaw = -1.5708f, .hour = 15.5f, .cam_lift = 0.75f, .cam_max = 4.6f, .cam_clear = 1, .cam_side = true},
+  {"lab", "THE LAB", "HSL-108 on a weekday afternoon, down the open floor by the electronics bench.", "THE LAB", .kind = STK_KH_LAB, .ring = 3.2f, .ring_z = 0.9f, .lab_x = 25, .lab_z = 4.7f, .yaw = -1.5708f, .hour = 15.5f, .cam_lift = 0.75f, .cam_max = 4.6f, .cam_clear = 1, .cam_side = true},
 #endif
-  {"main", "MAIN STREET", "West Main in front of the lab, the light rail going by.", TOWN("mid_block", 12.5f), .cam_clear = 2},
-  {"lot", "THE BACK LOT", "Behind the lab. Plenty of daylight, plenty of gravel.", TOWN("lot_fight", 17.6f), .cam_clear = 2},
-  {"bench", "THE LONG BENCH", "The lab's hall opened out, benches around a wide floor.", ARENA(STAGE_ARENA_BENCH)},
-  {"laser", "LASER CORNER", "A ring under an oversized laser gantry.", ARENA(STAGE_ARENA_LASER)},
-  {"fridge", "THE FRIDGE", "The kitchen, grown, tiled and frosted.", ARENA(STAGE_ARENA_FRIDGE)},
-  {"shop", "MACHINE SHOP", "Lathes and mills as pillars around a steel floor.", ARENA(STAGE_ARENA_SHOP)},
-  {"unfold", "THE WHOLE LAB, UNFOLDED", "Every room of the lab around a huge disc, night sky.", ARENA(STAGE_ARENA_UNFOLD)},
+  {"main", "MAIN STREET", "West Main in front of the lab, the light rail going by.", "MAIN STREET", TOWN("mid_block", 12.5f), .cam_clear = 2},
+  {"lot", "THE BACK LOT", "Behind the lab. Plenty of daylight, plenty of gravel.", "THE BACK LOT", TOWN("lot_fight", 17.6f), .cam_clear = 2},
+  {"bench", "THE LONG BENCH", "The lab's hall opened out, benches around a wide floor.", "THE LONG BENCH", ARENA(STAGE_ARENA_BENCH)},
+  {"laser", "LASER CORNER", "A ring under an oversized laser gantry.", "LASER CORNER", ARENA(STAGE_ARENA_LASER)},
+  {"fridge", "THE FRIDGE", "The kitchen, grown, tiled and frosted.", "THE FRIDGE", ARENA(STAGE_ARENA_FRIDGE)},
+  {"shop", "MACHINE SHOP", "Lathes and mills as pillars around a steel floor.", "THE MACHINE SHOP", ARENA(STAGE_ARENA_SHOP)},
+  {"unfold", "THE WHOLE LAB, UNFOLDED", "Every room of the lab around a huge disc, night sky.", "THE WHOLE LAB", ARENA(STAGE_ARENA_UNFOLD)},
 };
 const int STAGE_N = (int)(sizeof STAGES / sizeof STAGES[0]);
 int stage_index(const char *k) { for (int i = 0; k && i < STAGE_N; i++) if (!strcmp(STAGES[i].key, k)) return i; return -1; }

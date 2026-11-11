@@ -378,6 +378,8 @@ void dance_draw(void) {
   double Dt = song_time();
   float xe = D.xe;
   ov_begin();
+  /* a shade behind the header, the names and the scores, so they read over the stage's signs */
+  for (int k = 0; k < 16; k++) ov_fill(0, k * e * 0.0095f, P, e * 0.0095f + 0.5f, 0x0a0a0a, 0.62f * (1 - k / 16.f));
   text_at(0, D.np == 1 ? "DANCE BREAK" : "DANCE BATTLE", F_MARKER, roundf(e * 0.055f), "#f2ab1e", P / 2, e * 0.075f, 1, "#c2542c", 5 * t);
   text_at(1, D.track ? (Dt < 0 ? "GET READY" : D.track->name) : "", F_TYPE, roundf(e * 0.022f), "#a79d8c", P / 2, e * 0.125f, 1, NULL, 0);
   if (Dt < 9 * xe) {

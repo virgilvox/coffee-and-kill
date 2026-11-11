@@ -508,7 +508,7 @@ static void champ_paint(void) {
   y += 34 + 8;
   t_draw(c, F_MARKER, fs, 0, cx, t_base(F_MARKER, fs, y, fs * 0.95f), R->name, COL(C_INK));
   y += fs * 0.95f + 12;
-  char l[96]; snprintf(l, sizeof l, "%s. %s", tag, R->title);
+  char l[96]; snprintf(l, sizeof l, "%s, PLAYED BY %s", R->title, strcmp(tag, "CPU") ? tag : "THE CPU");
   t_draw(c, F_TYPE, 16, 2.88f, cx, y + t_asc(F_TYPE, 16), l, COL(C_INK));
   y += 22 + 8;
   snprintf(l, sizeof l, "%d ENTRANTS, %d MATCHES, ROUNDS %d TO %d", t->size, tourney_rounds(t), won, lost);
