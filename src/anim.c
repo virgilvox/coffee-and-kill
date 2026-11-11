@@ -20,7 +20,7 @@ ck_rig *rig_load(const char *asset) {
   if (!b || len < 12 || memcmp(b, "CKAN", 4)) { free(b); return NULL; }
   const uint8_t *p = b + 4;
   ck_rig *r = calloc(1, sizeof *r);
-  rd32(&p);
+  r->version = (int)rd32(&p);
   r->nb = (int)rd32(&p);
   for (int i = 0; i < r->nb && i < RIG_MAX_BONES; i++) rdstr(&p, r->bones[i], 24);
   r->nclips = (int)rd32(&p);
@@ -47,6 +47,7 @@ ck_rig *rig_load(const char *asset) {
     k->hips = malloc(sizeof(float) * nf * 3);
     memcpy(k->hips, p, sizeof(float) * nf * 3);
     p += (size_t)nf * 12;
+    if (r->version >= 2) k->speed = rdf(&p);
   }
   free(b);
   return r;
@@ -103,7 +104,8 @@ void mixer_init(ck_mixer *m, const ck_rig *rig, t3_object *model) {
     if (o) { m->orig_q[i][0] = o->quaternion.x; m->orig_q[i][1] = o->quaternion.y; m->orig_q[i][2] = o->quaternion.z; m->orig_q[i][3] = o->quaternion.w; }
     else { m->orig_q[i][3] = 1; ck_log("anim: no bone %s", rig->bones[i]); }
   }
-  m->hips = t3_object_get_by_name(model, "Hips");
+  m->hips_scale = 1;
+  m->hips = t3_object_get_by_name(model, rig->version >= 2 ? "hips" : "Hips");
   if (m->hips) { m->orig_p[0] = m->hips->position.x; m->orig_p[1] = m->hips->position.y; m->orig_p[2] = m->hips->position.z; }
   for (int i = 0; i < RIG_MAX_CLIPS; i++) m->actions[i].active_index = -1;
 }
@@ -249,7 +251,14 @@ void mixer_update(ck_mixer *m, float dt) {
     else if (m->cum_q[b] < 1) slerp_flat(q, q, m->orig_q[b], 1 - m->cum_q[b]);
     o->quaternion.x = q[0]; o->quaternion.y = q[1]; o->quaternion.z = q[2]; o->quaternion.w = q[3];
   }
-  if (m->hips) {
+  if (m->hips && r->version >= 2) {
+    /* rig_vroid.bin: offsets from the rest in hip heights (KEYHOLDER's anim.c) */
+    float *p = m->acc_p, k = m->cum_p > 0 ? m->hips_scale : 0;
+    if (m->cum_p > 0 && m->cum_p < 1) for (int i = 0; i < 3; i++) p[i] *= m->cum_p;
+    m->hips->position.x = m->orig_p[0] + p[0] * k;
+    m->hips->position.y = m->orig_p[1] + p[1] * k;
+    m->hips->position.z = m->orig_p[2] + p[2] * k;
+  } else if (m->hips) {
     float *p = m->acc_p;
     if (m->cum_p == 0) memcpy(p, m->orig_p, sizeof(float) * 3);
     else if (m->cum_p < 1) for (int i = 0; i < 3; i++) p[i] += (m->orig_p[i] - p[i]) * (1 - m->cum_p);

@@ -1,7 +1,9 @@
 /* anim.h: the fighters' animation, three.js's AnimationMixer and
  * AnimationAction as the original uses them, over the baked clips of
  * assets/anim/rig_<a|b>.bin (the page's U0 table: per clip, every bone's
- * quaternion at 30 fps as int16, and the Hips position).
+ * quaternion at 30 fps as int16, and the Hips position) and of
+ * assets/anim/rig_vroid.bin (tools/rig-vroid.mjs: the KEYHOLDER bodies' clips,
+ * whose hips track is an offset from the rest in units of hip height).
  *
  * three.c's own mixer has no fades, LoopOnce or clampWhenFinished, and the
  * game's timing rides on all three (a move ends when its clip pauses on its
@@ -14,8 +16,8 @@
 #include <stdint.h>
 #include "three.h"
 
-#define RIG_MAX_BONES 24
-#define RIG_MAX_CLIPS 72
+#define RIG_MAX_BONES 64
+#define RIG_MAX_CLIPS 96
 
 typedef struct { float peak, t, a0, a1; } ck_win;
 
@@ -26,10 +28,12 @@ typedef struct ck_clip {
   ck_win hand, foot;
   float *times;      /* nf: min(dur, i / 30) */
   float *quats;      /* nf * nbones * 4, normalised (x, y, z, w) */
-  float *hips;       /* nf * 3 */
+  float *hips;       /* nf * 3: the Hips position (version 1), or an offset in hip heights (version 2) */
+  float speed;       /* version 2: the ground speed the clip walks at, hip heights a second */
 } ck_clip;
 
 typedef struct ck_rig {
+  int version;       /* 1: the page's rigs, 2: rig_vroid.bin */
   int nb;
   char bones[RIG_MAX_BONES][24];
   int nclips;
@@ -66,6 +70,7 @@ typedef struct ck_mixer {
   float acc_q[RIG_MAX_BONES][4], acc_p[3];
   float cum_q[RIG_MAX_BONES], cum_p;
   bool bound;
+  float hips_scale;      /* version 2 rigs: this model's hip height (the hips track is in hip heights) */
 } ck_mixer;
 
 void mixer_init(ck_mixer *m, const ck_rig *rig, t3_object *model);
