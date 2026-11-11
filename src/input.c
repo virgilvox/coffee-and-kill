@@ -95,7 +95,7 @@ void input_push_menu(int player, int ev, int dev) {
   input_last_dev = dev;
 }
 int input_menu_events(const menu_ev **e) { *e = mev; return nmev; }
-float input_back_held(void) { return back_t0 < 0 ? 0 : (float)(ck_now() - back_t0); }
+float input_back_held(double since) { return back_t0 <= since ? 0 : (float)(ck_now() - back_t0); }
 
 void input_end_frame(void) { nkev = 0; nmev = 0; }
 int input_key_events(const int **codes) { *codes = kev; return nkev; }

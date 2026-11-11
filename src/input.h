@@ -71,7 +71,9 @@ enum { ME_UP, ME_DOWN, ME_LEFT, ME_RIGHT, ME_OK, ME_BACK, ME_SWAP, ME_PREV, ME_N
 typedef struct { int player, ev, dev; } menu_ev;
 int input_menu_events(const menu_ev **evs);
 void input_push_menu(int player, int ev, int dev);   /* a phone pad's (online.c) */
-/* how long the back button (B) has been held on any pad, seconds (0: not held) */
-float input_back_held(void);
+/* how long the back button (B on any pad, Escape) has been held, seconds; 0 when it is not held
+ * or when the hold began at or before `since` (a screen passes the ck_now() it was shown at, so
+ * the press that brought it there does not count) */
+float input_back_held(double since);
 
 #endif

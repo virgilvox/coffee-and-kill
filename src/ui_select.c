@@ -260,10 +260,12 @@ static void swap(void) {
 /* START: take what each side shows; a CPU nobody picked for fights as RANDOM */
 static void start_all(void) {
   if (modal) { ok(0); return; }
+  /* asked before the loop below makes P1 READY, which would hand P1 the CPU's turn */
+  bool cpu_unset = solo() && side_of(0) == 0;
   for (int g = 0; g < 2; g++) {
     pick_t *p = &PS[g];
     if (p->flips) { p->flips = 1; p->flip_t = 0; }
-    if (p->step == SS_FIGHTER && (p->cell == RANDOM_CELL || (cpu_side(g) && side_of(0) == 0))) {
+    if (p->step == SS_FIGHTER && (p->cell == RANDOM_CELL || (cpu_side(g) && cpu_unset))) {
       int f; do f = (int)(ck_rand() * ROSTER_N); while (f == PS[1 - g].fighter && ROSTER_N > 1);
       p->fighter = f; p->weapon = weapon_index(ROSTER[f].weapon); if (p->weapon < 0) p->weapon = 0;
       cursor_to(g, f, false);
@@ -644,9 +646,10 @@ static void reset_from_sel(void) {
   dirty_all();
 }
 static bool returning;
+static double shown_t;   /* when the select was shown: a hold of back counts only if it began later */
 void ui_select_return(void) { returning = true; }
 void select_show(void) {
-  modal = false;
+  modal = false; shown_t = ck_now();
   if (returning && PS[0].step == SS_READY && PS[1].step == SS_READY) {   /* back from the stage: undo the last step */
     returning = false;
     go_t = -1;
@@ -725,7 +728,7 @@ void select_frame(float dt) {
     if (go_t < 0) { go_t = -1; if (ui_cb.act) ui_cb.act("stage"); return; }
   }
   /* hold back to leave */
-  if (input_back_held() >= 0.6f && !modal) { to_title(); return; }
+  if (input_back_held(shown_t) >= 0.6f && !modal) { to_title(); return; }
   hint_update();
 }
 
@@ -770,6 +773,6 @@ void select_draw(void) {
   if (HINT[1].s[0]) { hint_line_draw(&HINT[0], 640, hy - 1, 1); hint_line_draw(&HINT[1], 640, hy + 23, 1); }
   else hint_line_draw(&HINT[0], 640, hy + 8, 1);
   /* BACK, filling while it is held */
-  float hb = input_back_held();
+  float hb = input_back_held(shown_t);
   if (hb > 0.12f && !modal) ov_fill(back_b.x, back_b.y + back_b.h - 6, back_b.w * fminf(1, hb / 0.6f), 6, C_PINK, 1);
 }
