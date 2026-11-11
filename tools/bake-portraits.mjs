@@ -7,8 +7,9 @@
 // black on frame i*8+6 and over white on frame i*8+7. The frame stores encoded colour, so an edge
 // pixel is a*F + (1-a)*background in that space: the two backgrounds (measured in a corner, as the
 // scene's tone mapping moves white) give a = 1 - (white - black) / (white bg - black bg) and
-// F = (black - (1-a) black bg) / a. The middle 560 x 560 of the 1280 x 720 frame, averaged down 4x, becomes
-// assets/portraits/<key>.png (140 x 140, straight alpha), which the select draws at 70 x 70.
+// F = (black - (1-a) black bg) / a. The middle 560 x 560 of the 1280 x 720 frame, averaged down 2x, becomes
+// assets/portraits/<key>.png (280 x 280, straight alpha). The loading card draws it at 212; the select
+// averages it down to its cells when it loads (ui_select.c portraits_load).
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -38,7 +39,7 @@ if (!cart) { console.error('usage: node tools/bake-portraits.mjs <portrait build
 const outDir = process.argv[3] || join(ROOT, 'assets', 'portraits');
 mkdirSync(outDir, { recursive: true });
 
-const W = 1280, H = 720, CROP = 560, SCALE = 4, N = CROP / SCALE;
+const W = 1280, H = 720, CROP = 560, SCALE = 2, N = CROP / SCALE;
 const { gl } = createWebGL2Context(W, H);
 const host = new CartHost();
 const keys = [];

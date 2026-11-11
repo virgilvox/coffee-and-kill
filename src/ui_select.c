@@ -30,27 +30,53 @@
 #define COLS 7
 #define CELLS 14                 /* the roster, then RANDOM */
 #define RANDOM_CELL (CELLS - 1)
-#define CELL 76
-#define GAP 8
-static float GRID_X = 350, GRID_Y = 492;   /* the screen's; the modal centres it */
+#define CELL 72
+#define GAP 8                    /* between columns */
+#define ROWGAP 30                /* between the rows: room for a row 2 cursor's tab (24) and its ring */
+#define GRID_W (COLS * CELL + (COLS - 1) * GAP)
+#define GRID_H (2 * CELL + ROWGAP)
+#define GRID_X0 ((CK_W - GRID_W) / 2.f)
+static float GRID_X = GRID_X0, GRID_Y = 492;   /* the screen's; the modal's sits lower in its card */
+#define MODAL_CARD_X 330         /* the modal's card (620 wide): its title, the grid, the name */
+#define MODAL_CARD_Y 222
+#define MODAL_CARD_H 324
 #define PANEL_W 310
 #define PANEL_Y 482
 #define PANEL_H 226
 static const float PANEL_X[2] = {24, 946};
 static const float BODY_X[2] = {270, 1010};   /* where game.c stands each side's fighter (screen x) */
 #define PLATE_BASE 452                         /* the name's baseline under each fighter */
-#define PORTRAIT 140                           /* baked portraits: drawn at 70 */
 
 static const char *LEVELS[3] = {"ROOKIE", "JOURNEYMAN", "EXTREME"};
 static uint32_t slot_col(int g) { return g ? C_CYAN : C_PINK; }
 
 static float cell_x(int i) { return GRID_X + (i % COLS) * (CELL + GAP); }
-static float cell_y(int i) { return GRID_Y + (i / COLS) * (CELL + GAP); }
+static float cell_y(int i) { return GRID_Y + (i / COLS) * (CELL + ROWGAP); }
 /* roster order fills the grid, RANDOM last */
 static int cell_of(int fighter) { return fighter >= 0 && fighter < ROSTER_N ? fighter : RANDOM_CELL; }
 
 /* ---------------------------------------------------------------- portraits */
-static struct { uint8_t *px; int w, h; } PORT[32];
+/* each fighter's baked portrait (280 px, tools/bake-portraits.mjs) for the large places (the
+ * loading card), and a copy averaged down to the grid's cells: the canvas's bicubic filter
+ * would alias a 4x shrink */
+static struct { uint8_t *px; int w, h; uint8_t *sm; int sn; } PORT[32];
+static uint8_t *area_down(const uint8_t *src, int W, int H, int n) {
+  uint8_t *o = malloc((size_t)n * n * 4);
+  for (int y = 0; y < n; y++) for (int x = 0; x < n; x++) {
+    float x0 = (float)x * W / n, x1 = (float)(x + 1) * W / n, y0 = (float)y * H / n, y1 = (float)(y + 1) * H / n;
+    float acc[4] = {0, 0, 0, 0}, wt = 0;
+    for (int sy = (int)y0; sy < (int)ceilf(y1) && sy < H; sy++) for (int sx = (int)x0; sx < (int)ceilf(x1) && sx < W; sx++) {
+      float w = (fminf(sx + 1, x1) - fmaxf(sx, x0)) * (fminf(sy + 1, y1) - fmaxf(sy, y0));
+      const uint8_t *p = src + ((size_t)sy * W + sx) * 4;
+      float a = p[3] / 255.f * w;   /* averaged with premultiplied alpha, so edges keep their colour */
+      acc[0] += p[0] * a; acc[1] += p[1] * a; acc[2] += p[2] * a; acc[3] += a; wt += w;
+    }
+    uint8_t *q = o + ((size_t)y * n + x) * 4;
+    for (int c = 0; c < 3; c++) q[c] = acc[3] > 1e-6f ? (uint8_t)fminf(255, acc[c] / acc[3] + .5f) : 0;
+    q[3] = wt > 0 ? (uint8_t)fminf(255, acc[3] / wt * 255 + .5f) : 0;
+  }
+  return o;
+}
 static void portraits_load(void) {
   for (int i = 0; i < ROSTER_N && i < 32; i++) {
     char n[48]; snprintf(n, sizeof n, "portrait_%s.png", ROSTER[i].key);
@@ -62,13 +88,20 @@ static void portraits_load(void) {
       PORT[i].w = T->width; PORT[i].h = T->height;
       PORT[i].px = malloc((size_t)T->width * T->height * 4);
       memcpy(PORT[i].px, T->pixels, (size_t)T->width * T->height * 4);
+      PORT[i].sn = CELL - 6;
+      PORT[i].sm = area_down(PORT[i].px, PORT[i].w, PORT[i].h, PORT[i].sn);
     }
     if (T) t3_release(T);
   }
 }
-/* a fighter's face in a w x h box: the portrait, or (before any are baked) initials */
+/* a fighter's face in a w x h box: the portrait (the cell copy for a cell or smaller), or (before
+ * any are baked) initials */
 static void portrait_paint(cv *c, int f, float x, float y, float w, float h) {
-  if (f >= 0 && f < 32 && PORT[f].px) { cv_draw_image(c, PORT[f].px, PORT[f].w, PORT[f].h, x, y, w, h); return; }
+  if (f >= 0 && f < 32 && PORT[f].px) {
+    if (w <= PORT[f].sn + 0.5f) cv_draw_image(c, PORT[f].sm, PORT[f].sn, PORT[f].sn, x, y, w, h);
+    else cv_draw_image(c, PORT[f].px, PORT[f].w, PORT[f].h, x, y, w, h);
+    return;
+  }
   const char *nm = roster_get(f)->name, *sp = strchr(nm, ' ');
   char in[3] = {nm[0], sp && sp[1] ? sp[1] : nm[1], 0};
   float fs = h * 0.42f, tw = t_width(F_MARKER, fs, 0, in);
@@ -434,7 +467,7 @@ static void cell_paint(cv *c, int i, float ox, float oy) {
   c_border(c, x, y, CELL, CELL, 3, COL(C_INK));
 }
 static void grid_paint(void) {
-  L_ensure(&GRID_L, 7 * (CELL + GAP) + 16, 2 * (CELL + GAP) + 16);
+  L_ensure(&GRID_L, GRID_W + 24, GRID_H + 24);
   cv *c = GRID_L.c;
   for (int i = 0; i < CELLS; i++) cell_paint(c, i, GRID_X - 6, GRID_Y - 6);
   dirty_grid = false;
@@ -489,6 +522,8 @@ static void panel_paint(int g) {
   cv *c = L->c;
   float X = 0, Y = 0, ix = 16, IW = PANEL_W - 32;
   bool act = side_active(g) && !p->flips;
+  /* on RANDOM (or while it chooses) the panel is RANDOM's, as the plate is: no colours, no weapon */
+  bool rnd = (p->step == SS_FIGHTER && p->cell == RANDOM_CELL) || p->flips;
   c_box(c, X, Y, PANEL_W, PANEL_H, COL(C_CREAM), 4, COL(C_INK), 8, 8, COL(slot_col(g)));
   const roster_entry *e = roster_get(p->fighter);
   const weapon_def *W = &WEAPONS[p->weapon];
@@ -499,7 +534,7 @@ static void panel_paint(int g) {
   t_draw(c, F_LCD, 18, 0, ix + 7, SWATCH_Y + 19, w, COL(C_CREAM));
   const char *sl = step_label(g);
   t_draw(c, F_LCD, 15, 0, ix + ww + 8, SWATCH_Y + 19, sl, p->step == SS_READY ? COL(slot_col(g) == C_PINK ? 0x8a5a00 : 0x2c5c8c) : COL(C_INK));
-  for (int k = 0; k < ROSTER_COLOURS; k++) {
+  for (int k = 0; k < ROSTER_COLOURS && !rnd; k++) {
     float sx = swatch_x(g, k) - PANEL_X[g], sy = SWATCH_Y + 3;
     bool on = k == colour_of(g), taken = !modal && PS[1 - g].fighter == p->fighter && colour_of(1 - g) == k;
     if (on) { sx -= 2; sy -= 2; c_rect(c, sx + 3, sy + 3, 18, 18, COL(C_INK)); }
@@ -509,8 +544,17 @@ static void panel_paint(int g) {
     if (taken && !on) { cv_begin(c); cv_move(c, sx + 3, sy + 15); cv_line(c, sx + 15, sy + 3); cv_line_width(c, 2.5f); cv_stroke_hex(c, C_INK, 1); cv_stroke(c); }
   }
   /* (b) the bio */
-  char bl[3][160]; int nb = t_wrap(F_TYPE, 14, 0, e->bio, IW, false, bl, 2);
+  const char *bio = rnd ? "Anyone on the roster but the other side's pick." : e->bio;
+  char bl[3][160]; int nb = t_wrap(F_TYPE, 14, 0, bio, IW, false, bl, 2);
   for (int k = 0; k < nb; k++) t_draw(c, F_TYPE, 14, 0, ix, 58 + k * 18, bl[k], COLA(C_INK, 0.9f));
+  if (rnd) {
+    const char *q = "THEIR OWN WEAPON";
+    float qw = t_width(F_MARKER, 20, 0, q);
+    t_draw(c, F_MARKER, 20, 0, ix + (IW - qw) / 2, WROW_Y + 12 + 20 * 0.36f, q, COLA(C_INK, 0.6f));
+    if (!act && !p->flips && p->step != SS_READY) c_rect(c, 4, 4, PANEL_W - 8, PANEL_H - 8, COLA(C_CREAM, 0.35f));
+    dirty_panel[g] = false;
+    return;
+  }
   /* (c) the weapon: arrows round its name, its tag, the numbers, its EXTREME */
   bool kw = act && p->step == SS_WEAPON;
   float wy = WROW_Y;
@@ -619,8 +663,8 @@ static void hint_update(void) {
   }
   /* the line fits under the grid: a long one sets smaller, never under 14 */
   hint_style sa = st, sb = st;
-  while (sa.fs > 14 && hint_width(&sa, a) > 7 * (CELL + GAP)) sa.fs -= 0.5f;
-  while (sb.fs > 14 && hint_width(&sb, b) > 7 * (CELL + GAP)) sb.fs -= 0.5f;
+  while (sa.fs > 14 && hint_width(&sa, a) > GRID_W + 40) sa.fs -= 0.5f;
+  while (sb.fs > 14 && hint_width(&sb, b) > GRID_W + 40) sb.fs -= 0.5f;
   hint_line_set(&HINT[0], &sa, a);
   hint_line_set(&HINT[1], &sb, b);
 }
@@ -667,7 +711,7 @@ void select_show(void) {
 void select_modal_open(int fighter, const char *title, void (*done)(int fighter)) {
   modal = true; modal_done = done;
   snprintf(modal_title, sizeof modal_title, "%s", title ? title : "");
-  GRID_X = 350; GRID_Y = 282;
+  GRID_X = GRID_X0; GRID_Y = MODAL_CARD_Y + 78;   /* the tab clears the title's rule */
   memset(PS, 0, sizeof PS);
   PS[0].fighter = fighter >= 0 && fighter < ROSTER_N ? fighter : 0;
   PS[0].weapon = weapon_index(ROSTER[PS[0].fighter].weapon); if (PS[0].weapon < 0) PS[0].weapon = 0;
@@ -676,16 +720,14 @@ void select_modal_open(int fighter, const char *title, void (*done)(int fighter)
   hover_cell = -1; tab_s[0][0] = 0;
   dirty_all();
 }
-#define MODAL_CARD_X 330
-#define MODAL_CARD_Y 222
 bool select_modal_active(void) { return modal; }
-void select_modal_close(void) { modal = false; modal_done = NULL; GRID_X = 350; GRID_Y = 492; dirty_all(); }
+void select_modal_close(void) { modal = false; modal_done = NULL; GRID_X = GRID_X0; GRID_Y = 492; dirty_all(); }
 /* the modal's card: what it picks for, the grid's place, the fighter under the cursor */
 static void modal_card_paint(void) {
   layer *L = &PLATE_L[1];
-  L_ensure(L, 640, 330);
+  L_ensure(L, 640, MODAL_CARD_H + 18);
   cv *c = L->c;
-  c_box(c, 0, 0, 620, 312, COL(C_CREAM), 4, COL(C_INK), 8, 8, COL(C_PINK));
+  c_box(c, 0, 0, 620, MODAL_CARD_H, COL(C_CREAM), 4, COL(C_INK), 8, 8, COL(C_PINK));
   t_draw(c, F_TYPE, 15, 2.4f, 20, 30, "PICK A FIGHTER", COL(C_INK));
   float tw = t_width(F_TYPE, 15, 1.5f, modal_title);
   t_draw(c, F_TYPE, 15, 1.5f, 600 - tw, 30, modal_title, COLA(C_INK, 0.75f));
@@ -695,9 +737,9 @@ static void modal_card_paint(void) {
   const roster_entry *e = roster_get(p->flips ? p->cell : p->fighter);
   const char *nm = rnd && !p->flips ? "RANDOM" : e->name, *ti = rnd && !p->flips ? "ANYONE" : e->title;
   float fs = 34; while (fs > 22 && t_width(F_MARKER, fs, 0, nm) > 380) fs -= 1;
-  t_draw(c, F_MARKER, fs, 0, 20, 294, nm, COL(C_INK));
+  t_draw(c, F_MARKER, fs, 0, 20, MODAL_CARD_H - 18, nm, COL(C_INK));
   float w2 = t_width(F_TYPE, 15, 2.4f, ti);
-  t_draw(c, F_TYPE, 15, 2.4f, 600 - w2, 290, ti, COLA(C_INK, 0.75f));
+  t_draw(c, F_TYPE, 15, 2.4f, 600 - w2, MODAL_CARD_H - 22, ti, COLA(C_INK, 0.75f));
   dirty_plate[1] = false;
 }
 
@@ -769,7 +811,9 @@ void select_draw(void) {
   }
   if (!modal) for (int g = 0; g < 2; g++) { L_upload(&PANEL_L[g]); ov_draw(PANEL_L[g].t, PANEL_X[g], PANEL_Y, 1); }
   /* the hint under the grid (the modal's, under its card) */
-  float hy = modal ? MODAL_CARD_Y + 312 + 36 : GRID_Y + 2 * CELL + GAP + 22;
+  float hy = modal ? MODAL_CARD_Y + MODAL_CARD_H + 22 : GRID_Y + GRID_H + 22;
+  /* the modal's hint on an ink strip under its card, over whatever the screen below shows there */
+  if (modal) ov_fill(MODAL_CARD_X, MODAL_CARD_Y + MODAL_CARD_H + 12, 620, 36, C_INK, 0.92f);
   if (HINT[1].s[0]) { hint_line_draw(&HINT[0], 640, hy - 1, 1); hint_line_draw(&HINT[1], 640, hy + 23, 1); }
   else hint_line_draw(&HINT[0], 640, hy + 8, 1);
   /* BACK, filling while it is held */

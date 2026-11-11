@@ -297,9 +297,8 @@ static void go_match(void) {
   if (stage_current() == s || !stage_needs_load(s)) { use_stage(s); start_match(); return; }
   pending_stage = s; pending_step = 0;
   const char *a, *b; labels(&a, &b);
-  int k = STAGES[s].kind;
   ui_show("s-load"); ui_load_vs(STAGES[s].name, a, b);
-  ui_load(0.1f, k == STK_KH_LAB ? "walking over to the lab" : k == STK_KH_TOWN ? "heading out onto West Main" : "opening up the Battle Zone");
+  ui_load(0.1f, STAGES[s].going ? STAGES[s].going : "loading the stage");
 }
 static bool pending_frame(void) {
   if (pending_stage < 0) return false;

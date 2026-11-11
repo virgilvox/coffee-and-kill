@@ -24,6 +24,7 @@ enum { STK_WORKSHOP, STK_KH_ARENA, STK_KH_TOWN, STK_KH_LAB };
 typedef struct {
   const char *key, *name, *blurb;
   const char *where;     /* the place in a line ("THE SHOP IS YOURS", "MAIN STREET WINS THIS ONE") */
+  const char *going;     /* the loading card's line while it loads ("heading out onto West Main") */
   int kind;              /* STK_* */
   bool web;              /* the web version's own arena: the only one online against the web page */
   float ring;            /* how far from the centre the fighters may go (along the fighters' line) */

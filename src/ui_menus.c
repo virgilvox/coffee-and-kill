@@ -482,7 +482,11 @@ static void bracket_key(int e) {
   if (e == WC_KEY_LEFT || e == WC_KEY_UP) { br_btn = (br_btn + nb - 1) % nb; sfx_ui(); }
   else if (e == WC_KEY_RIGHT || e == WC_KEY_DOWN || e == WC_KEY_TAB) { br_btn = (br_btn + 1) % nb; sfx_ui(); }
   else if (e == WC_KEY_ENTER || e == WC_KEY_KP_ENTER || e == WC_KEY_SPACE) { act(acts[br_btn]); return; }
-  else if (e == WC_KEY_ESCAPE) { br_btn = nb - 1; sfx_ui(); }
+  else if (e == WC_KEY_ESCAPE) {   /* back is QUIT: the first asks, the second leaves */
+    br_btn = nb - 1;
+    if (was) { act("tquit"); return; }
+    br_confirm = true; sfx_ui();
+  }
   else return;
   bracket_paint();
 }
