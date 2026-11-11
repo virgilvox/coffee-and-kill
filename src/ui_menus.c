@@ -139,8 +139,7 @@ static void stage_paint(void) {
     }
     c_border(c, x, y, ST_TW, ST_TH, 3, COL(C_INK));
     const char *sn = k < STAGE_N ? SHORT[k] : "RANDOM";
-    float nfs = 14; while (nfs > 12 && t_width(F_TYPE, nfs, 0, sn) > ST_TW) nfs -= 0.5f;
-    float nw = t_width(F_TYPE, nfs, 0, sn);
+    float nfs = 14, nw = t_width(F_TYPE, nfs, 0, sn);   /* SHORT's names fit ST_TW at 14 px */
     static const tshadow NS = {1, {{1, 1, COL(C_INK)}}};
     t_draw_sh(c, F_TYPE, nfs, 0, x + (ST_TW - nw) / 2, y + ST_TH + 22, sn, on ? COL(C_PINK) : COL(C_CREAM), &NS);
     hit_add(st_x(k), ST_Y, ST_TW, ST_TH + 26, H_STAGE, 100 + k, 0, NULL);
@@ -373,7 +372,7 @@ static void name_box(cv *c, const tourney_t *t, int ent, float x, float y, float
   char tag[8]; entrant_tag(t, ent, tag, sizeof tag);
   col_t ink = state == 2 ? COLA(C_INK, 0.45f) : COL(C_INK);
   t_draw(c, F_LCD, 15, 0, x + 12, y + 7 + t_asc(F_LCD, 15), tag, ink);
-  float fs = fit_fs(R->name, 17, w - 86, 13);
+  float fs = fit_fs(R->name, 17, w - 84, 14);   /* the name runs from x + 50 to the wins box */
   t_draw(c, F_MARKER, fs, 0, x + 50, y + 15 + fs * 0.36f, R->name, ink);
   if (state) {
     char wn[4]; snprintf(wn, sizeof wn, "%d", wins);
@@ -392,7 +391,8 @@ static void bracket_paint(void) {
   c_box(c, x0, top, W, H, COL(C_CREAM), 4, COL(C_INK), 8, 8, COL(C_PINK));
   float cx = x0 + 26, cy = top + 20, IW = W - 52;
   /* the columns: each round, then the champion */
-  float colw = (IW - 40) / (R + 1), boxw = colw - 46, area_top = cy + 40, area_h = H - 20 - 40 - 110;
+  /* boxw: 14 px names fit (BRANT HOLLOWAY in an 8 bracket); the lines meet halfway between boxes */
+  float colw = (IW - 40) / (R + 1), boxw = colw - 36, gap = colw + 10 - boxw, area_top = cy + 40, area_h = H - 20 - 40 - 110;
   for (int r = 0; r <= R; r++) {
     float x = cx + r * (colw + 10);
     const char *nm = r < R ? tourney_round_name(t, r) : "CHAMPION";
@@ -414,21 +414,21 @@ static void bracket_paint(void) {
       if (m == t->cur) c_dash_rect(c, x - 7, my - 39, boxw + 14, 78, 3, COL(C_PINK));
       /* the line on to the next round */
       if (r > 0) {
-        float px = x - 10 - 18, a = pos[tourney_round_first(t, r - 1) + k * 2], b = pos[tourney_round_first(t, r - 1) + k * 2 + 1];
+        float px = x - gap / 2 - 1, a = pos[tourney_round_first(t, r - 1) + k * 2], b = pos[tourney_round_first(t, r - 1) + k * 2 + 1];
         c_rect(c, px, a, 3, b - a + 3, COL(C_INK));
-        c_rect(c, px, my, 18, 3, COL(C_INK));
+        c_rect(c, px, my, gap / 2 + 1, 3, COL(C_INK));
       }
-      c_rect(c, x + boxw, my, 18, 3, COL(C_INK));
+      c_rect(c, x + boxw, my, gap / 2 + 1, 3, COL(C_INK));
     }
   }
   /* the champion's box */
   {
     float x = cx + R * (colw + 10), my = pos[tourney_matches(t) - 1];
-    c_rect(c, x - 28, my, 28, 3, COL(C_INK));
+    c_rect(c, x - gap / 2, my, gap / 2, 3, COL(C_INK));
     if (t->champion >= 0) {
       c_box(c, x, my - 24, boxw, 48, COL(C_PINK), 3, COL(C_INK), 5, 5, COL(C_INK));
       const roster_entry *Rr = roster_get(t->e[t->champion].fighter);
-      float fs = fit_fs(Rr->name, 22, boxw - 20, 12);
+      float fs = fit_fs(Rr->name, 22, boxw - 20, 14);
       t_draw(c, F_MARKER, fs, 0, x + 10, my - 24 + 12 + t_asc(F_MARKER, 22), Rr->name, COL(C_INK));
     } else {
       c_rect(c, x, my - 24, boxw, 48, COLA(C_PAPER, 0.6f));
@@ -436,9 +436,17 @@ static void bracket_paint(void) {
       t_draw(c, F_MARKER, 22, 0, x + 12, my - 24 + 12 + t_asc(F_MARKER, 22), "?", COLA(C_INK, 0.4f));
     }
   }
-  /* the next match and the buttons */
+  /* the next match and the buttons; each button is as wide as its label needs (SURE? QUIT) */
   float by = top + H - 20 - 80;
   c_rect(c, cx, by - 12, IW, 3, COL(C_INK));
+  const char *acts[3], *labels[3]; int nb = br_buttons(acts, labels);
+  if (br_btn >= nb) br_btn = nb ? nb - 1 : 0;
+  float bw[3], bfs[3], btot = 0;
+  for (int i = 0; i < nb; i++) {
+    bfs[i] = i == 0 ? 32 : 24;
+    bw[i] = fmaxf(i == 0 ? 220 : 130, ceilf(t_width(F_MARKER, bfs[i], bfs[i] * 0.02f, labels[i])) + 44);
+    btot += bw[i] + (i ? 18 : 0);
+  }
   if (t->cur >= 0) {
     const t_match *M = &t->m[t->cur];
     char l1[96], l2[128];
@@ -447,22 +455,19 @@ static void bracket_paint(void) {
     char ta[8], tb[8]; entrant_tag(t, M->a, ta, sizeof ta); entrant_tag(t, M->b, tb, sizeof tb);
     snprintf(l2, sizeof l2, "%s (%s) VS %s (%s)", roster_get(t->e[M->a].fighter)->name, ta, roster_get(t->e[M->b].fighter)->name, tb);
     t_draw(c, F_TYPE, 14, 2.2f, cx, by + 4 + t_asc(F_TYPE, 14), l1, COL(C_INK));
-    float fs = fit_fs(l2, 24, IW - 520, 16);
+    float fs = fit_fs(l2, 24, IW - btot - 24, 16);
     t_draw(c, F_MARKER, fs, 0, cx, by + 24 + t_asc(F_MARKER, 24), l2, COL(C_INK));
     char l3[96]; controls_line(t, t->cur, l3, sizeof l3);
     t_draw(c, F_TYPE, 14, 0.7f, cx, by + 58 + t_asc(F_TYPE, 14), l3, COL(0x8a5a00));
   }
-  const char *acts[3], *labels[3]; int nb = br_buttons(acts, labels);
-  if (br_btn >= nb) br_btn = nb ? nb - 1 : 0;
   float bx = cx + IW;
   for (int i = nb - 1; i >= 0; i--) {
-    float w = i == 0 ? 220 : 130;
-    bx -= w;
-    btn_t b; btn_init(&b, bx, by + 4, w, 60, i == 0 ? 32 : 24, 16, 12, i == 0 ? BTN_GO : BTN_GHOST, labels[i], acts[i]);
+    bx -= bw[i];
+    btn_t b; btn_init(&b, bx, by + 4, bw[i], 60, bfs[i], 16, 12, i == 0 ? BTN_GO : BTN_GHOST, labels[i], acts[i]);
     b.center = true;
     btn_paint_at(c, &b, br_btn == i ? 1 : 0, 0, 0);
     hit_add(b.x, b.y, b.w, b.h, H_ACT, 0, 0, acts[i]);
-    bx -= 14;
+    bx -= 18;
   }
 }
 static void bracket_key(int e) {
