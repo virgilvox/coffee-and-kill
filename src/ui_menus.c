@@ -185,7 +185,12 @@ static void stage_draw(void) {
 }
 
 /* ================================================================== the tourney setup */
-static rlayer ts_R; static int ts_focus, ts_btn;   /* rows: 0 size, 1 stage, 2.. entrants, then the buttons */
+/* Rows: the size, the stage, an entrant each, then the buttons. On an entrant, A opens the fighter
+ * grid (ui_select.c as a modal), left and right change the weapon and Y who plays. The focus shows
+ * from the start, on the first entrant. */
+static rlayer ts_R; static int ts_focus = 2, ts_btn = 1;
+#define TS_W 1040
+#define TS_ROW 36
 static int ts_rows(void) { return TT ? 2 + TT->size + 1 : 1; }
 static const char *stage_label(int s) { return s < 0 ? "A NEW ONE EACH MATCH" : STAGES[s].name; }
 static void entrant_tag(const tourney_t *t, int i, char *out, int cap) {
@@ -193,81 +198,98 @@ static void entrant_tag(const tourney_t *t, int i, char *out, int cap) {
   int k = 1; for (int j = 0; j < i; j++) k += t->e[j].ctl == TC_PLAYER;
   snprintf(out, cap, "P%d", k);
 }
+static const char *LEVEL_OF[TC_N] = {"", "ROOKIE", "JOURNEYMAN", "EXTREME"};
+/* a value between two arrows, each arrow a 40 px target */
+static void arrows_paint(cv *c, float x, float y, float w, float h, bool on, int kind, int a) {
+  arrow(c, x + 14, y + h / 2, -1, COLA(C_INK, on ? 1 : 0.45f));
+  arrow(c, x + w - 14, y + h / 2, 1, COLA(C_INK, on ? 1 : 0.45f));
+  hit_add(x, y, 40, h, kind, a, -1, NULL);
+  hit_add(x + w - 40, y, 40, h, kind, a, 1, NULL);
+}
+static float ts_x0(void) { return (CK_W - TS_W) / 2.f; }
 static void tsetup_paint(void) {
   nhits = 0;
   if (!TT) return;
   tourney_t *t = TT;
-  float W = 1000, rowH = 38;
-  float H = 22 + 41 + 12 + 34 + 10 + 34 + 14 + t->size * rowH + 10 + 64 + 22;
-  float x0 = (CK_W - W) / 2, top = fmaxf(88, (CK_H - H) / 2 + 30), cx = x0 + 26, cy = top + 22, IW = W - 52;
+  float W = TS_W, rowH = TS_ROW;
+  float H = 22 + 41 + 12 + 36 + 8 + 36 + 14 + 22 + t->size * rowH + 10 + 26 + 64 + 22;
+  float x0 = ts_x0(), top = fmaxf(90, (CK_H - H) / 2 + 30), cx = x0 + 26, cy = top + 22, IW = W - 52;
   R_begin(&ts_R, (int)x0 - 12, (int)top - 12, (int)W + 30, (int)H + 30);
   cv *c = ts_R.L.c;
   c_box(c, x0, top, W, H, COL(C_CREAM), 4, COL(C_INK), 8, 8, COL(C_PINK));
-  t_draw(c, F_MARKER, 30, 0, cx, t_base(F_MARKER, 30, cy, 30), "BRACKET", COL(C_INK));
-  char hum[48]; snprintf(hum, sizeof hum, "%d PLAYER%s, %d CPU", tourney_humans(t), tourney_humans(t) == 1 ? "" : "S", t->size - tourney_humans(t));
-  t_draw(c, F_TYPE, 13, 1.82f, cx + IW - t_width(F_TYPE, 13, 1.82f, hum), cy + 12 + t_asc(F_TYPE, 13), hum, COLA(C_INK, 0.7f));
+  t_draw(c, F_MARKER, 30, 0, cx, t_base(F_MARKER, 30, cy, 30), "TOURNEY SETUP", COL(C_INK));
+  char hum[48]; int nh = tourney_humans(t);
+  snprintf(hum, sizeof hum, "%d PLAYER%s, %d CPU", nh, nh == 1 ? "" : "S", t->size - nh);
+  t_draw(c, F_TYPE, 15, 1.5f, cx + IW - t_width(F_TYPE, 15, 1.5f, hum), cy + 12 + t_asc(F_TYPE, 15), hum, COLA(C_INK, 0.8f));
   c_rect(c, cx, cy + 38, IW, 3, COL(C_INK));
   float y = cy + 41 + 12;
-  /* size */
-  lab_paint(c, cx, y + 8.5f, "ENTRANTS");
-  float bx = cx + 150;
+  bool ring = input_last_dev != DEV_MOUSE;
+  /* the size */
+  t_draw(c, F_TYPE, 15, 2.4f, cx, y + 23, "ENTRANTS", COL(C_INK));
+  float bx = cx + 170;
   for (int k = 0; k < 2; k++) {
     const char *n = k ? "8" : "4";
     chip_paint(c, bx, y, n, t->size == (k ? 8 : 4));
     hit_add(bx, y, chip_w(n), 34, H_TSIZE, k ? 8 : 4, 0, NULL);
     bx += chip_w(n) + 8;
   }
-  t_draw(c, F_TYPE, 12, 1.2f, bx + 14, y + 10 + t_asc(F_TYPE, 12), "SINGLE ELIMINATION, BEST OF THREE ROUNDS", COLA(C_INK, 0.7f));
-  if (ts_focus == 0 && kbd_nav) focus_ring(c, cx - 4, y - 2, IW + 8, 38);
-  y += 34 + 10;
-  /* stage */
-  lab_paint(c, cx, y + 8.5f, "STAGE");
+  t_draw(c, F_TYPE, 14, 1.4f, bx + 14, y + 22, "SINGLE ELIMINATION, BEST OF THREE ROUNDS", COLA(C_INK, 0.75f));
+  if (ts_focus == 0 && ring) c_dash_rect(c, cx - 6, y - 4, IW + 12, 42, 3, COL(C_PINK));
+  y += 36 + 8;
+  /* the stage */
+  t_draw(c, F_TYPE, 15, 2.4f, cx, y + 23, "STAGE", COL(C_INK));
   const char *sl = stage_label(t->stage);
-  arrow(c, cx + 158, y + 17, -1, COL(C_INK));
-  t_draw(c, F_MARKER, 20, 0, cx + 176, y + 5 + t_asc(F_MARKER, 20), sl, COL(C_INK));
-  arrow(c, cx + 176 + t_width(F_MARKER, 20, 0, sl) + 18, y + 17, 1, COL(C_INK));
-  hit_add(cx + 146, y, 26, 34, H_TSTAGE, -1, 0, NULL);
-  hit_add(cx + 176 + t_width(F_MARKER, 20, 0, sl) + 6, y, 26, 34, H_TSTAGE, 1, 0, NULL);
-  if (ts_focus == 1 && kbd_nav) focus_ring(c, cx - 4, y - 2, IW + 8, 38);
-  y += 34 + 14;
-  /* the entrants */
+  float sw = t_width(F_MARKER, 20, 0, sl) + 80;
+  arrows_paint(c, cx + 160, y, sw, 34, ts_focus == 1, H_TSTAGE, 0);
+  t_draw(c, F_MARKER, 20, 0, cx + 200, y + 25, sl, COL(C_INK));
+  if (ts_focus == 1 && ring) c_dash_rect(c, cx - 6, y - 4, IW + 12, 42, 3, COL(C_PINK));
+  y += 36 + 14;
+  /* the entrants: who plays, the fighter (a click opens the grid), the weapon */
+  float wx = cx, fx = cx + 210, gx = cx + 640;
+  t_draw(c, F_TYPE, 14, 2.2f, wx, y + 14, "WHO PLAYS", COLA(C_INK, 0.75f));
+  t_draw(c, F_TYPE, 14, 2.2f, fx, y + 14, "FIGHTER", COLA(C_INK, 0.75f));
+  t_draw(c, F_TYPE, 14, 2.2f, gx, y + 14, "WEAPON", COLA(C_INK, 0.75f));
+  y += 22;
   for (int i = 0; i < t->size; i++) {
-    float ry = y + i * rowH;
+    float ry = y + i * rowH, rh = rowH - 4;
     const t_entrant *E = &t->e[i];
     const roster_entry *R = roster_get(E->fighter);
     bool f = ts_focus == 2 + i;
-    c_rect(c, cx, ry, IW, rowH - 6, f ? COLA(C_PINK, 0.35f) : COL(C_PAPER));
-    c_border(c, cx, ry, IW, rowH - 6, 2, COL(C_INK));
-    c_rect(c, cx, ry, 8, rowH - 6, COL(R->color));
-    char tag[8]; entrant_tag(t, i, tag, sizeof tag);
-    t_draw(c, F_LCD, 16, 0, cx + 18, ry + 6 + t_asc(F_LCD, 16), tag, COL(C_INK));
-    /* who plays: a chip that cycles */
-    const char *cn = tourney_ctl_name(E->ctl);
-    float chx = cx + 74;
-    c_box(c, chx, ry + 4, 190, rowH - 14, E->ctl == TC_PLAYER ? COL(C_INK) : COL(C_CREAM), 2, COL(C_INK), 0, 0, COL(0));
-    t_draw(c, F_TYPE, 12, 1.2f, chx + 10, ry + 9 + t_asc(F_TYPE, 12), cn, E->ctl == TC_PLAYER ? COL(C_CREAM) : COL(C_INK));
-    hit_add(chx, ry + 4, 190, rowH - 14, H_TCTL, i, 0, NULL);
-    /* the fighter, with arrows */
-    float fx = chx + 210;
-    arrow(c, fx + 6, ry + 16, -1, COLA(C_INK, f ? 1 : 0.4f));
-    float fs = fit_fs(R->name, 20, 260, 14);
-    t_draw(c, F_MARKER, fs, 0, fx + 22, ry + 5 + t_asc(F_MARKER, 20), R->name, COL(C_INK));
-    arrow(c, fx + 296, ry + 16, 1, COLA(C_INK, f ? 1 : 0.4f));
-    hit_add(fx - 4, ry, 24, rowH - 6, H_TFIGHTER, i, -1, NULL);
-    hit_add(fx + 284, ry, 24, rowH - 6, H_TFIGHTER, i, 1, NULL);
-    /* the weapon: click (or Tab) for the next */
-    float wx = fx + 320;
-    const char *wn = WEAPONS[E->weapon].name;
-    t_draw(c, F_TYPE, 13, 1.3f, wx, ry + 9 + t_asc(F_TYPE, 13), wn, COL(C_INK));
-    hit_add(wx, ry, IW - (wx - cx), rowH - 6, H_TWEAPON, i, 0, NULL);
+    c_rect(c, cx, ry, IW, rh, f ? COLA(C_PINK, 0.3f) : COL(C_PAPER));
+    c_border(c, cx, ry, IW, rh, 2, COL(C_INK));
+    /* who plays: P1.. in ink, or the CPU and its level */
+    char tag[24]; entrant_tag(t, i, tag, 8);
+    if (E->ctl != TC_PLAYER) snprintf(tag, sizeof tag, "CPU %s", LEVEL_OF[E->ctl]);
+    bool pl = E->ctl == TC_PLAYER;
+    c_box(c, wx + 6, ry + 5, 190, rh - 10, pl ? COL(C_INK) : COL(C_CREAM), 2, COL(C_INK), 0, 0, COL(0));
+    t_draw(c, pl ? F_LCD : F_TYPE, pl ? 18 : 14, 0, wx + 16, ry + rh / 2 + (pl ? 7 : 5), tag, pl ? COL(C_CREAM) : COL(C_INK));
+    hit_add(wx + 6, ry + 5, 190, rh - 10, H_TCTL, i, 0, NULL);
+    /* the fighter: its stripe, face and name */
+    c_rect(c, fx - 6, ry + 2, 6, rh - 4, COL(R->color));
+    c_rect(c, fx + 2, ry + 3, rh - 6, rh - 6, COL(C_PAPER));
+    select_face(c, E->fighter, fx + 2, ry + 3, rh - 6, rh - 6);
+    float fs = fit_fs(R->name, 20, 330, 15);
+    t_draw(c, F_MARKER, fs, 0, fx + rh + 8, ry + rh / 2 + fs * 0.36f, R->name, COL(C_INK));
+    hit_add(fx - 6, ry, 420, rh, H_TFIGHTER, i, 0, NULL);
+    /* the weapon, between arrows */
+    arrows_paint(c, gx - 4, ry, IW - (gx - cx) + 4, rh, f, H_TWEAPON, i);
+    t_draw(c, F_TYPE, 15, 0.8f, gx + 36, ry + rh / 2 + 5, WEAPONS[E->weapon].name, COL(C_INK));
+    if (f && ring) c_dash_rect(c, cx - 5, ry - 4, IW + 10, rh + 8, 3, COL(C_PINK));
   }
   y += t->size * rowH + 10;
+  /* the prompt, for the device in use */
+  static const tshadow NS = {0};
+  hint_style hs = {15, 0.6f, COL(C_INK), &NS};
+  const char *hp = hint_pick("{A} PICK THE FIGHTER   {LEFT}{RIGHT} THE WEAPON   {Y} WHO PLAYS   {START} BEGIN",
+                             "[ENTER] PICK THE FIGHTER   [LEFT][RIGHT] THE WEAPON   [TAB] WHO PLAYS",
+                             "<CLICK> A FIGHTER, A WEAPON'S ARROWS OR WHO PLAYS TO CHANGE IT",
+                             "<LIGHT> PICK THE FIGHTER   <STICK> THE WEAPON   <DODGE> WHO PLAYS");
+  while (hs.fs > 14 && hint_width(&hs, hp) > IW) hs.fs -= 0.5f;
+  hint_paint(c, &hs, cx, y + 12, hp);
+  y += 26;
   /* the buttons */
-  const char *hint = "UP AND DOWN PICK A ROW. LEFT AND RIGHT CHANGE THE FIGHTER. ENTER: WHO PLAYS. TAB: WEAPON.";
-  char hl[3][160]; int nh = t_wrap(F_TYPE, 11, 1.1f, hint, IW - 360 - 14 - 230 - 20, false, hl, 3);
-  for (int k = 0; k < nh; k++) t_draw(c, F_TYPE, 11, 1.1f, cx, y + 16 + k * 15 + t_asc(F_TYPE, 11), hl[k], COLA(C_INK, 0.65f));
   bool fb = ts_focus == ts_rows() - 1;
-  btn_t sh; btn_init(&sh, cx + IW - 360 - 14 - 230, y, 230, 64, 22, 16, 16, BTN_GHOST, "SHUFFLE CPUS", "tshuffle");
+  btn_t sh; btn_init(&sh, cx + IW - 360 - 14 - 250, y, 250, 64, 22, 16, 16, BTN_GHOST, "SHUFFLE CPUS", "tshuffle");
   sh.center = true;
   btn_paint_at(c, &sh, fb && ts_btn == 0 ? 1 : 0, 0, 0);
   hit_add(sh.x, sh.y, sh.w, sh.h, H_ACT, 0, 0, "tshuffle");
@@ -279,25 +301,40 @@ static void tsetup_act(const char *a) {
   if (!strcmp(a, "tshuffle")) { tourney_shuffle_cpus(TT); sfx_ui(); tsetup_paint(); return; }
   act(a);
 }
+static int ts_grid_for = -1;
+static void ts_grid_done(int f) {
+  if (f >= 0 && ts_grid_for >= 0) { tourney_set_fighter(TT, ts_grid_for, f); sfx_ui_ok(); }
+  select_modal_close();
+  ts_grid_for = -1;
+  tsetup_paint();
+}
+static void ts_open_grid(int i) {
+  char t[48], tag[8]; entrant_tag(TT, i, tag, sizeof tag);
+  snprintf(t, sizeof t, "ENTRANT %d, %s", i + 1, tag);
+  ts_grid_for = i; ts_focus = 2 + i;
+  sfx_ui();
+  select_modal_open(TT->e[i].fighter, t, ts_grid_done);
+}
 static void tsetup_key(int e) {
   if (!TT) return;
   int n = ts_rows(), r = ts_focus;
-  if (!kbd_nav && (e == WC_KEY_UP || e == WC_KEY_DOWN || e == WC_KEY_LEFT || e == WC_KEY_RIGHT)) { kbd_nav = true; sfx_ui(); tsetup_paint(); return; }
   kbd_nav = true;
+  if (e == CK_KEY_START) { tsetup_act("tstart"); return; }
   if (e == WC_KEY_UP) { ts_focus = (r + n - 1) % n; sfx_ui(); }
   else if (e == WC_KEY_DOWN) { ts_focus = (r + 1) % n; sfx_ui(); }
   else if (e == WC_KEY_LEFT || e == WC_KEY_RIGHT) {
     int d = e == WC_KEY_RIGHT ? 1 : -1;
     if (r == 0) tourney_set_size(TT, TT->size == 4 ? 8 : 4);
     else if (r == 1) { TT->stage += d; if (TT->stage < -1) TT->stage = STAGE_N - 1; if (TT->stage >= STAGE_N) TT->stage = -1; }
-    else if (r < n - 1) tourney_cycle_fighter(TT, r - 2, d);
+    else if (r < n - 1) tourney_cycle_weapon(TT, r - 2, d);
     else ts_btn ^= 1;
     sfx_ui();
-  } else if (e == WC_KEY_TAB) { if (r >= 2 && r < n - 1) { tourney_cycle_weapon(TT, r - 2, 1); sfx_ui(); } }
+  } else if (e == WC_KEY_TAB) { if (r >= 2 && r < n - 1) { tourney_cycle_ctl(TT, r - 2, 1); sfx_ui(); } }
   else if (e == WC_KEY_ENTER || e == WC_KEY_KP_ENTER || e == WC_KEY_SPACE) {
-    if (r >= 2 && r < n - 1) { tourney_cycle_ctl(TT, r - 2, 1); sfx_ui(); }
+    if (r >= 2 && r < n - 1) { ts_open_grid(r - 2); return; }
     else if (r == n - 1) { tsetup_act(ts_btn ? "tstart" : "tshuffle"); return; }
-    else { ts_focus = n - 1; ts_btn = 1; sfx_ui(); }
+    else if (r == 0) { tourney_set_size(TT, TT->size == 4 ? 8 : 4); sfx_ui(); }
+    else { ts_focus = 2; sfx_ui(); }
   } else if (e == WC_KEY_ESCAPE) { act("back"); return; }
   else return;
   if (ts_focus >= ts_rows()) ts_focus = ts_rows() - 1;
@@ -305,28 +342,39 @@ static void tsetup_key(int e) {
 }
 
 /* ================================================================== the bracket */
-static rlayer br_R; static int br_btn;
+static rlayer br_R; static int br_btn; static bool br_confirm;   /* QUIT pressed once: press again to leave */
 static int br_buttons(const char **acts, const char **labels) {
   int n = 0;
   if (!TT || TT->cur < 0) return 0;
   bool cpu = tourney_cpu_only(TT, TT->cur);
   acts[n] = "tplay"; labels[n++] = cpu ? "WATCH" : "FIGHT!";
   if (cpu) { acts[n] = "tskip"; labels[n++] = "SKIP"; }
-  acts[n] = "tquit"; labels[n++] = "QUIT";
+  acts[n] = "tquit"; labels[n++] = br_confirm ? "SURE? QUIT" : "QUIT";
   return n;
+}
+/* who takes which controls for a match: two people split them (pad 1 or WASD on the left, pad 2
+ * or the arrows on the right); one person against the CPU plays on any of them */
+static void controls_line(const tourney_t *t, int m, char *out, int cap) {
+  const t_match *M = &t->m[m];
+  char ta[8], tb[8]; entrant_tag(t, M->a, ta, sizeof ta); entrant_tag(t, M->b, tb, sizeof tb);
+  bool ha = t->e[M->a].ctl == TC_PLAYER, hb = t->e[M->b].ctl == TC_PLAYER;
+  bool keys = input_last_dev == DEV_KEYS || input_last_dev == DEV_MOUSE;
+  if (ha && hb) snprintf(out, cap, keys ? "%s ON THE LEFT (WASD), %s ON THE RIGHT (ARROWS)" : "%s TAKES PAD 1 (LEFT), %s TAKES PAD 2 (RIGHT)", ta, tb);
+  else if (ha || hb) snprintf(out, cap, "%s PLAYS ON ANY PAD OR THE KEYBOARD", ha ? ta : tb);
+  else snprintf(out, cap, "THE CPU PLAYS BOTH SIDES: WATCH IT OR SKIP IT");
 }
 static void name_box(cv *c, const tourney_t *t, int ent, float x, float y, float w, int wins, int state) {
   /* state: 0 waiting, 1 won, 2 lost */
   c_rect(c, x, y, w, 30, state == 1 ? COL(C_PAPER) : state == 2 ? COLA(C_PAPER, 0.55f) : COL(C_PAPER));
   c_border(c, x, y, w, 30, 2, COL(C_INK));
-  if (ent < 0) { t_draw(c, F_TYPE, 12, 1.2f, x + 10, y + 8 + t_asc(F_TYPE, 12), "TBD", COLA(C_INK, 0.5f)); return; }
+  if (ent < 0) { t_draw(c, F_TYPE, 14, 1.4f, x + 10, y + 7 + t_asc(F_TYPE, 14), "TO BE DECIDED", COLA(C_INK, 0.5f)); return; }
   const roster_entry *R = roster_get(t->e[ent].fighter);
   c_rect(c, x, y, 6, 30, COL(R->color));
   char tag[8]; entrant_tag(t, ent, tag, sizeof tag);
   col_t ink = state == 2 ? COLA(C_INK, 0.45f) : COL(C_INK);
-  t_draw(c, F_LCD, 12, 0, x + 12, y + 8 + t_asc(F_LCD, 12), tag, ink);
-  float fs = fit_fs(R->name, 15, w - 80, 10);
-  t_draw(c, F_MARKER, fs, 0, x + 46, y + 7 + t_asc(F_MARKER, 15), R->name, ink);
+  t_draw(c, F_LCD, 15, 0, x + 12, y + 7 + t_asc(F_LCD, 15), tag, ink);
+  float fs = fit_fs(R->name, 17, w - 86, 13);
+  t_draw(c, F_MARKER, fs, 0, x + 50, y + 15 + fs * 0.36f, R->name, ink);
   if (state) {
     char wn[4]; snprintf(wn, sizeof wn, "%d", wins);
     c_rect(c, x + w - 26, y + 4, 22, 22, state == 1 ? COL(C_PINK) : COLA(C_INK, 0.15f));
@@ -398,9 +446,11 @@ static void bracket_paint(void) {
     snprintf(l1, sizeof l1, "NEXT: %s, %s", tourney_round_name(t, tourney_round_of(t, t->cur)), STAGES[st].name);
     char ta[8], tb[8]; entrant_tag(t, M->a, ta, sizeof ta); entrant_tag(t, M->b, tb, sizeof tb);
     snprintf(l2, sizeof l2, "%s (%s) VS %s (%s)", roster_get(t->e[M->a].fighter)->name, ta, roster_get(t->e[M->b].fighter)->name, tb);
-    lab_paint(c, cx, by + 8, l1);
-    float fs = fit_fs(l2, 24, IW - 540, 13);
-    t_draw(c, F_MARKER, fs, 0, cx, by + 30 + t_asc(F_MARKER, 24), l2, COL(C_INK));
+    t_draw(c, F_TYPE, 14, 2.2f, cx, by + 4 + t_asc(F_TYPE, 14), l1, COL(C_INK));
+    float fs = fit_fs(l2, 24, IW - 520, 16);
+    t_draw(c, F_MARKER, fs, 0, cx, by + 24 + t_asc(F_MARKER, 24), l2, COL(C_INK));
+    char l3[96]; controls_line(t, t->cur, l3, sizeof l3);
+    t_draw(c, F_TYPE, 14, 0.7f, cx, by + 58 + t_asc(F_TYPE, 14), l3, COL(0x8a5a00));
   }
   const char *acts[3], *labels[3]; int nb = br_buttons(acts, labels);
   if (br_btn >= nb) br_btn = nb ? nb - 1 : 0;
@@ -418,6 +468,12 @@ static void bracket_paint(void) {
 static void bracket_key(int e) {
   const char *acts[3], *labels[3]; int nb = br_buttons(acts, labels);
   if (!nb) return;
+  if (e == CK_KEY_START) { act("tplay"); return; }
+  bool was = br_confirm;
+  br_confirm = false;
+  if ((e == WC_KEY_ENTER || e == WC_KEY_KP_ENTER || e == WC_KEY_SPACE) && !strcmp(acts[br_btn], "tquit") && !was) {
+    br_confirm = true; sfx_ui(); bracket_paint(); return;
+  }
   if (e == WC_KEY_LEFT || e == WC_KEY_UP) { br_btn = (br_btn + nb - 1) % nb; sfx_ui(); }
   else if (e == WC_KEY_RIGHT || e == WC_KEY_DOWN || e == WC_KEY_TAB) { br_btn = (br_btn + 1) % nb; sfx_ui(); }
   else if (e == WC_KEY_ENTER || e == WC_KEY_KP_ENTER || e == WC_KEY_SPACE) { act(acts[br_btn]); return; }
@@ -489,8 +545,8 @@ void ui_menus_changed(void) { repaint(); }
 void menus_show(const char *id) {
   if (!strcmp(id, "s-select")) select_show();
   if (!strcmp(id, "s-stage")) st_prev_of = -2;
-  if (!strcmp(id, "s-tsetup")) { ts_focus = TT ? ts_rows() - 1 : 0; ts_btn = 1; }
-  if (!strcmp(id, "s-bracket")) br_btn = 0;
+  if (!strcmp(id, "s-tsetup")) { ts_focus = 2; ts_btn = 1; }
+  if (!strcmp(id, "s-bracket")) { br_btn = 0; br_confirm = false; }
   if (!strcmp(id, "s-champ")) { ch_idx = 0; for (int i = 0; i < 2; i++) { ch_b[i].sel = i == 0; tr_jump(&ch_b[i].t, i == 0 ? 1 : 0); ch_b[i].painted = -1; } }
   repaint();
 }
@@ -533,14 +589,16 @@ static void click(const hit_t *h) {
   const char *s = scr_cur;
   switch (h->kind) {
     case H_ACT:
-      if (!strcmp(s, "s-tsetup")) tsetup_act(h->s); else act(h->s);
+      if (!strcmp(s, "s-tsetup")) tsetup_act(h->s);
+      else if (!strcmp(h->s, "tquit") && !br_confirm) { br_confirm = true; sfx_ui(); bracket_paint(); }
+      else { br_confirm = false; act(h->s); }
       return;
     case H_STAGE: if (h->a - 100 == st_cell()) { act("start"); return; } stage_pick(h->a - 100); break;
     case H_TSIZE: tourney_set_size(TT, h->a); sfx_ui(); break;
-    case H_TSTAGE: TT->stage += h->a; if (TT->stage < -1) TT->stage = STAGE_N - 1; if (TT->stage >= STAGE_N) TT->stage = -1; sfx_ui(); break;
+    case H_TSTAGE: TT->stage += h->b; if (TT->stage < -1) TT->stage = STAGE_N - 1; if (TT->stage >= STAGE_N) TT->stage = -1; ts_focus = 1; sfx_ui(); break;
     case H_TCTL: tourney_cycle_ctl(TT, h->a, 1); ts_focus = 2 + h->a; sfx_ui(); break;
-    case H_TFIGHTER: tourney_cycle_fighter(TT, h->a, h->b); ts_focus = 2 + h->a; sfx_ui(); break;
-    case H_TWEAPON: tourney_cycle_weapon(TT, h->a, 1); ts_focus = 2 + h->a; sfx_ui(); break;
+    case H_TFIGHTER: ts_open_grid(h->a); return;
+    case H_TWEAPON: tourney_cycle_weapon(TT, h->a, h->b); ts_focus = 2 + h->a; sfx_ui(); break;
   }
   repaint();
 }

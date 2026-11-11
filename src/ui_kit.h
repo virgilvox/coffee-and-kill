@@ -50,7 +50,7 @@ void select_frame(float dt);
 void select_draw(void);
 void select_key(int code);
 void select_pointer(float x, float y, bool pressed);
-void select_modal_open(int fighter, void (*done)(int fighter));
+void select_modal_open(int fighter, const char *title, void (*done)(int fighter));
 bool select_modal_active(void);
 void select_modal_close(void);
 void select_face(cv *c, int fighter, float x, float y, float w, float h);   /* a fighter's portrait */

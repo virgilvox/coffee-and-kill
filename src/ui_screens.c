@@ -244,6 +244,13 @@ static void pause_init(void) {
   btn_init(&pause_b[2], x, y + 146, 468, 57, 32, 22, 8, BTN_GHOST, "QUIT TO MENU", "quit");
 }
 
+/* in a tourney the pause card goes back to the bracket instead of quitting (the bracket's QUIT asks first) */
+void ui_pause_tourney(bool on) {
+  btn_t *b = &pause_b[2];
+  bool keep = b->sel; trans_t tr = b->t; layer L = b->L;
+  btn_init(b, b->x, b->y, b->w, b->h, 32, 22, 8, BTN_GHOST, on ? "BACK TO BRACKET" : "QUIT TO MENU", on ? "tbracket" : "quit");
+  b->sel = keep; b->t = tr; b->L = L; b->painted = -1;
+}
 static rlayer end_R; static btn_t end_b[3];
 static char end_name[40] = "MOHEEB"; static bool end_wins = true; static char end_sub[64] = "FLAWLESS";
 static void end_layout(void) {
@@ -527,7 +534,7 @@ void scr_show(const char *id) {
     int n; btn_t *b = menu_btns(&n);
     for (int i = 0; i < n; i++) { b[i].sel = i == 0; tr_jump(&b[i].t, i == 0 ? 1 : 0); b[i].painted = -1; }
   }
-  kbd_nav = false;
+  kbd_nav = input_last_dev != DEV_MOUSE;   /* a pad or the keys: the focus shows from the start */
   if (menus_owns(id)) { menus_show(id); return; }
   if (!strcmp(id, "s-online")) { ol_focus = 0; online_paint(); }
   if (!strcmp(id, "s-pads")) { pd_focus = 0; pads_paint(); }
@@ -647,7 +654,9 @@ static void online_key(int code) {
 void scr_key(int e) {
   const char *P = scr_cur;
   if (!P) return;
-  if (select_modal_active()) { select_key(e); return; }
+  if (select_modal_active()) { select_key(e == CK_KEY_START ? WC_KEY_ENTER : e); return; }
+  /* a pad's Start: the tourney's screens take it (begin, play); elsewhere it is Enter */
+  if (e == CK_KEY_START && strcmp(P, "s-tsetup") && strcmp(P, "s-bracket")) e = WC_KEY_ENTER;
   if (!strcmp(P, "s-online")) { online_key(e); return; }
   if (!strcmp(P, "s-pads")) {
     if (e == WC_KEY_UP || e == WC_KEY_DOWN || e == WC_KEY_LEFT || e == WC_KEY_RIGHT || e == WC_KEY_TAB) {

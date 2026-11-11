@@ -35,6 +35,10 @@ void tourney_cycle_fighter(tourney_t *t, int i, int d) {
   t->e[i].fighter = (t->e[i].fighter + d + ROSTER_N) % ROSTER_N;
   t->e[i].weapon = default_weapon(t->e[i].fighter);
 }
+void tourney_set_fighter(tourney_t *t, int i, int f) {
+  if (i < 0 || i >= t->size || f < 0 || f >= ROSTER_N) return;
+  t->e[i].fighter = f; t->e[i].weapon = default_weapon(f);
+}
 void tourney_cycle_weapon(tourney_t *t, int i, int d) {
   if (i < 0 || i >= t->size) return;
   t->e[i].weapon = (t->e[i].weapon + d + WEAPON_N) % WEAPON_N;

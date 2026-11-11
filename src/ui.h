@@ -78,6 +78,7 @@ void ui_toast(const char *s);
 void ui_fx(const char *text, float x, float y, const char *cls);
 void ui_flash(uint32_t rgb, float a, float ms);
 void ui_hud(bool on);
+void ui_pause_tourney(bool on);   /* the pause card's last button: BACK TO BRACKET in a tourney, else QUIT TO MENU */
 /* the end card: name is "MOHEEB" with wins true for "<name> <em>WINS</em>", or "DRAW" */
 void ui_set_end(const char *name, bool wins, const char *sub);
 void ui_load(float p, const char *msg);

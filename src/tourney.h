@@ -42,6 +42,7 @@ void tourney_set_size(tourney_t *t, int size);
 void tourney_cycle_ctl(tourney_t *t, int i, int d);
 void tourney_cycle_fighter(tourney_t *t, int i, int d);   /* the fighter's own weapon comes with it */
 void tourney_cycle_weapon(tourney_t *t, int i, int d);
+void tourney_set_fighter(tourney_t *t, int i, int fighter);   /* with its own weapon */
 void tourney_shuffle_cpus(tourney_t *t);         /* new fighters for the CPU entrants */
 
 void tourney_start(tourney_t *t, uint32_t seed);  /* seeds the first round in a shuffled order */

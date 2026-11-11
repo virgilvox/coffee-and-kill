@@ -337,7 +337,12 @@ static void start_round(void) {
   gui_combo(0, 0, NULL); gui_combo(1, 0, NULL);
   if (G.net_role) gui_set_hint("WASD move   Q light   E heavy   R kick   SPACE block   SHIFT dodge   F extreme");
   G.phase = PH_INTRO; G.phase_t = 0; G.intro_stage = 0; G.cam_snap = true;
-  gui_announce(r, G.round == RT * 2 - 1 ? "FINAL ROUND" : "");
+  char sub[64] = "";
+  if (G.round == RT * 2 - 1) snprintf(sub, sizeof sub, "FINAL ROUND");
+  else if (G.in_tourney && G.round == 1 && !G.cpu[0] && !G.cpu[1])
+    snprintf(sub, sizeof sub, input_last_dev == DEV_KEYS ? "%s ON WASD, %s ON THE ARROWS" : "%s ON PAD 1, %s ON PAD 2", G.label[0], G.label[1]);
+  else if (G.in_tourney && G.round == 1 && (G.cpu[0] != G.cpu[1])) snprintf(sub, sizeof sub, "%s ON ANY PAD", G.label[G.cpu[0] ? 1 : 0]);
+  gui_announce(r, sub);
   sfx_bell(); music_set_level(1);
 }
 
@@ -382,7 +387,7 @@ static void toggle_pause(void) {
   if (G.net_role) return;
   if (!(G.phase == PH_FIGHT || G.phase == PH_INTRO || G.phase == PH_KO || G.phase == PH_BETWEEN)) return;
   G.paused = !G.paused;
-  if (G.paused) { ui_show("s-pause"); music_set_level(0.15f); }
+  if (G.paused) { ui_pause_tourney(G.in_tourney); ui_show("s-pause"); music_set_level(0.15f); }
   else { ui_hide_all(); music_set_level(1); }
 }
 
@@ -1222,6 +1227,9 @@ static bool tourney_act(const char *v) {
   else if (!strcmp(v, "tskip")) {
     tourney_sim(&G.T);
     if (G.T.cur < 0) tourney_champion(); else ui_menus_changed();
+  } else if (!strcmp(v, "tbracket")) {   /* from the pause card: the match is left unplayed, still next */
+    G.in_tourney = false; G.paused = false; special_stop(); if (dance_active()) dance_cancel();
+    menu_mode(); show_both(); gui_clear_announce(); gui_hud(false); G.phase = PH_MATCHEND; ui_show("s-bracket");
   } else if (!strcmp(v, "tquit")) { G.in_tourney = false; G.T.started = false; G.paused = false; special_stop(); use_stage(0); menu_mode(); show_both(); ui_show("s-title"); }
   else if (!strcmp(v, "tnew")) { G.T.started = false; G.in_tourney = false; use_stage(0); menu_mode(); show_both(); ui_show("s-tsetup"); }
   else return false;
@@ -1305,7 +1313,7 @@ static void pad_keys(void) {
       case ME_OK: k = WC_KEY_ENTER; break;
       case ME_BACK: k = WC_KEY_ESCAPE; break;
       case ME_SWAP: k = WC_KEY_TAB; break;
-      case ME_START: k = !strcmp(s, "s-pause") ? WC_KEY_ESCAPE : WC_KEY_ENTER; break;
+      case ME_START: k = !strcmp(s, "s-pause") ? WC_KEY_ESCAPE : CK_KEY_START; break;
     }
     else if (e[i].ev == ME_START || (G.phase == PH_DANCE && e[i].ev == ME_BACK)) k = WC_KEY_ESCAPE;
     if (k) input_push_key(k);

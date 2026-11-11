@@ -99,6 +99,7 @@ static hint_line HINT[2];
 static int hover_cell = -1;    /* the mouse over a cell */
 static bool modal;             /* picking for the tourney or the online screen (select_modal_open) */
 static void (*modal_done)(int fighter);
+static char modal_title[48];
 
 static bool cpu_side(int g) { return scr_mode == 1 && g == 1; }
 static bool solo(void) { return scr_mode == 1; }
@@ -473,7 +474,7 @@ static uint32_t swatch_rgb(const roster_entry *e, int k) {
   if (d > 1e-4f) { if (mx == r) h = fmodf((g - b) / d + 6, 6); else if (mx == g) h = (b - r) / d + 2; else h = (r - g) / d + 4; }
   return hsv_hex(h * 60 + t->hue, (mx > 0 ? d / mx : 0) * (t->sat ? t->sat : 1), mx * (t->val ? t->val : 1));
 }
-static const char *who(int g) { return modal ? "P1" : cpu_side(g) ? "CPU" : g ? "P2" : "P1"; }
+static const char *who(int g) { return modal ? "PICK" : cpu_side(g) ? "CPU" : g ? "P2" : "P1"; }
 static void arrow(cv *c, float x, float y, int dir, float s, col_t col) {
   cv_begin(c);
   cv_move(c, x - 5 * s * dir, y - 8 * s); cv_line(c, x + 6 * s * dir, y); cv_line(c, x - 5 * s * dir, y + 8 * s);
@@ -660,8 +661,10 @@ void select_show(void) {
   for (int g = 0; g < 2; g++) write_sel(g, true);
 }
 /* the grid alone, for the tourney's rows and the online screen: done(fighter) or done(-1) */
-void select_modal_open(int fighter, void (*done)(int fighter)) {
+void select_modal_open(int fighter, const char *title, void (*done)(int fighter)) {
   modal = true; modal_done = done;
+  snprintf(modal_title, sizeof modal_title, "%s", title ? title : "");
+  GRID_X = 350; GRID_Y = 282;
   memset(PS, 0, sizeof PS);
   PS[0].fighter = fighter >= 0 && fighter < ROSTER_N ? fighter : 0;
   PS[0].weapon = weapon_index(ROSTER[PS[0].fighter].weapon); if (PS[0].weapon < 0) PS[0].weapon = 0;
@@ -670,8 +673,30 @@ void select_modal_open(int fighter, void (*done)(int fighter)) {
   hover_cell = -1; tab_s[0][0] = 0;
   dirty_all();
 }
+#define MODAL_CARD_X 330
+#define MODAL_CARD_Y 222
 bool select_modal_active(void) { return modal; }
-void select_modal_close(void) { modal = false; modal_done = NULL; }
+void select_modal_close(void) { modal = false; modal_done = NULL; GRID_X = 350; GRID_Y = 492; dirty_all(); }
+/* the modal's card: what it picks for, the grid's place, the fighter under the cursor */
+static void modal_card_paint(void) {
+  layer *L = &PLATE_L[1];
+  L_ensure(L, 640, 330);
+  cv *c = L->c;
+  c_box(c, 0, 0, 620, 312, COL(C_CREAM), 4, COL(C_INK), 8, 8, COL(C_PINK));
+  t_draw(c, F_TYPE, 15, 2.4f, 20, 30, "PICK A FIGHTER", COL(C_INK));
+  float tw = t_width(F_TYPE, 15, 1.5f, modal_title);
+  t_draw(c, F_TYPE, 15, 1.5f, 600 - tw, 30, modal_title, COLA(C_INK, 0.75f));
+  c_rect(c, 20, 40, 580, 3, COL(C_INK));
+  const pick_t *p = &PS[0];
+  bool rnd = p->cell == RANDOM_CELL || p->flips;
+  const roster_entry *e = roster_get(p->flips ? p->cell : p->fighter);
+  const char *nm = rnd && !p->flips ? "RANDOM" : e->name, *ti = rnd && !p->flips ? "ANYONE" : e->title;
+  float fs = 34; while (fs > 22 && t_width(F_MARKER, fs, 0, nm) > 380) fs -= 1;
+  t_draw(c, F_MARKER, fs, 0, 20, 294, nm, COL(C_INK));
+  float w2 = t_width(F_TYPE, 15, 2.4f, ti);
+  t_draw(c, F_TYPE, 15, 2.4f, 600 - w2, 290, ti, COLA(C_INK, 0.75f));
+  dirty_plate[1] = false;
+}
 
 void select_frame(float dt) {
   /* the pads and the phone pads, by player */
@@ -712,7 +737,11 @@ void select_draw(void) {
     if (dirty_plate[g] && !modal) plate_paint(g);
     tab_paint(g);
   }
-  if (modal) ov_fill(0, 0, CK_W, CK_H, 0x0a0a0a, 0.62f);
+  if (modal) {
+    if (dirty_plate[0] || dirty_plate[1] || !PLATE_L[1].c) { modal_card_paint(); dirty_plate[0] = false; }
+    ov_fill(0, 0, CK_W, CK_H, 0x0a0a0a, 0.62f);
+    L_upload(&PLATE_L[1]); ov_draw(PLATE_L[1].t, MODAL_CARD_X, MODAL_CARD_Y, 1);
+  }
   /* the plates under the fighters */
   if (!modal) for (int g = 0; g < 2; g++) { L_upload(&PLATE_L[g]); ov_draw(PLATE_L[g].t, BODY_X[g] - 180, PLATE_BASE - 92, 1); }
   /* the grid */
@@ -736,8 +765,8 @@ void select_draw(void) {
     ov_draw(TAB_L[g].t, tx, ty, a);
   }
   if (!modal) for (int g = 0; g < 2; g++) { L_upload(&PANEL_L[g]); ov_draw(PANEL_L[g].t, PANEL_X[g], PANEL_Y, 1); }
-  /* the hint under the grid */
-  float hy = GRID_Y + 2 * CELL + GAP + 22;
+  /* the hint under the grid (the modal's, under its card) */
+  float hy = modal ? MODAL_CARD_Y + 312 + 36 : GRID_Y + 2 * CELL + GAP + 22;
   if (HINT[1].s[0]) { hint_line_draw(&HINT[0], 640, hy - 1, 1); hint_line_draw(&HINT[1], 640, hy + 23, 1); }
   else hint_line_draw(&HINT[0], 640, hy + 8, 1);
   /* BACK, filling while it is held */

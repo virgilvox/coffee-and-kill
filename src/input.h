@@ -16,6 +16,7 @@
 #define CK_KEY_RCTRL  0xE4
 #define CK_KEY_RSHIFT 0xE5
 #define CK_KEY_RALT   0xE6
+#define CK_KEY_START  0xF0   /* a pad's Start on a menu (game.c pushes it): Enter, unless the screen takes it */
 
 /* qe.poll(s): one player's intent this frame. Movement is held, the five
  * attacks are presses (edges), block is held. */
