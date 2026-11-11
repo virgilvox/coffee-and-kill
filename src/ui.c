@@ -660,6 +660,9 @@ static void draw_hud(void) {
       if (k & 1) u = 1 - u;
       bright = 1 + 0.5f * EASE(u);
       if (k & 1) bright = 1 + 0.5f * (1 - EASE(1 - u));
+      /* in eight steps: each step repaints and uploads the whole side, and a full meter can
+       * pulse for a long while (every frame cost a 600 KB upload, a few ms on the station) */
+      bright = 1 + roundf((bright - 1) * 16) / 16;
     }
     float sig[6] = {hp, lag, H.meter[i], bright, (float)H.pips_on[i], (float)H.pips_of[i]};
     if (!H.side_ok[i] || memcmp(sig, H.painted[i], sizeof sig)) {

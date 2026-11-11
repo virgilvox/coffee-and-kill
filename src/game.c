@@ -27,7 +27,11 @@
 
 /* Rt, GC, AI (the ring's radius, the page's Dv, is the stage's: stage_ring) */
 #define RT 2
+#ifdef CK_TEST_ROUND   /* test builds: short rounds and no dance break */
+#define GC ((float)CK_TEST_ROUND)
+#else
 #define GC 60.0f
+#endif
 #define AI_X 2.3f
 
 enum { PH_LOAD, PH_MENU, PH_INTRO, PH_FIGHT, PH_KO, PH_BETWEEN, PH_MATCHEND, PH_DANCE };
@@ -702,6 +706,9 @@ static void step(float A) {
     else { G.f[k]->state = ST_IDLE; fighter_play(G.f[k], "Sword_Idle", 0.12f, false, 1, 0, true); }
   }
   if (special_active()) special_update(A);
+#ifdef CK_TEST_METER   /* test builds: the meter stays full (the online test throws one at will) */
+  if (D) for (int k = 0; k < 2; k++) if (G.f[k]->state != ST_SPECIAL) G.f[k]->meter = 100;
+#endif
   for (int k = 0; k < 2; k++) if (G.f[k]->state == ST_SPECIAL && special_attacker() != G.f[k]) {
     G.f[k]->state = ST_IDLE; fighter_play(G.f[k], "Sword_Idle", 0.16f, false, 1, 0, true);
   }
@@ -1174,7 +1181,10 @@ static void pad_keys(void) {
 
 void game_init(void) {
   memset(&G, 0, sizeof G);
-  G.phase = PH_LOAD; G.mode = 1; G.dance_on = true; G.last_track = -1; G.ko_winner = -1; G.slow = 1;
+  G.phase = PH_LOAD; G.mode = 1; G.dance_on = true;
+#ifdef CK_TEST_ROUND
+  G.dance_on = false;
+#endif G.last_track = -1; G.ko_winner = -1; G.slow = 1;
   snprintf(G.sel.slots[0].ch, 12, "moheeb"); snprintf(G.sel.slots[0].weapon, 12, "pipe");
   snprintf(G.sel.slots[1].ch, 12, "luis"); snprintf(G.sel.slots[1].weapon, 12, "sledge");
   G.sel.level = 1;

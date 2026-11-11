@@ -235,6 +235,9 @@ static void start_match(int role, const char *mid, const char *opp_id, const cha
     snprintf(them.weapon, 12, "%s", weapon_index(opp_w) >= 0 && WEAPONS[weapon_index(opp_w)].web ? opp_w : "pipe");
     snprintf(me.stage, 12, "workshop"); snprintf(them.stage, 12, "workshop");
   }
+#ifdef CK_ONLINE_TEST
+  ck_log("online: match as %s, me %s %s, them %s %s, stage %s", role == NET_HOST ? "host" : "guest", me.fighter, me.weapon, them.fighter, them.weapon, me.stage);
+#endif
   game_begin_online(role, L.name, &me, opp_n, &them);
 }
 
@@ -417,6 +420,15 @@ void online_init(void) {
   snprintf(ui_online.name, sizeof ui_online.name, "%s", ck_save_get("ck_name", ""));
   ui_online.room[0] = 0;
   ui_on_olweapon = ui_weapon; ui_on_olfighter = ui_fighter; ui_on_olstage = ui_stage;
+#ifdef CK_PICK0   /* test builds: the online picks too */
+  ui_fighter(CK_PICK0);
+#endif
+#ifdef CK_WEAPON0
+  ui_weapon(CK_WEAPON0);
+#endif
+#ifdef CK_STAGE
+  ui_stage(STAGES[CK_STAGE].key);
+#endif
   ui_on_challenge = challenge;
   ui_on_room_enter = online_join;
 }
@@ -442,6 +454,9 @@ void online_update(float dt) {
   if (L.chal && now_ms() - L.ch_at > 14e3) { L.chal = false; ui_online.challenge = false; }
 #ifdef CK_ONLINE_TEST
   if (L.chal && now_ms() - L.ch_at > 1000) { ck_log("online: accepting %s", L.ch_n); online_accept(); }
+#endif
+#ifdef CK_ONLINE_CHALLENGE   /* test builds: challenge the first one in the room, once */
+  { static bool sent; if (!sent && L.in_lobby && !L.in_match && !L.pending && L.npeers > 0) { sent = true; ck_log("online: challenging %s (v%d %s)", L.peers[0].n, L.peers[0].v, L.peers[0].c); challenge(L.peers[0].id); } }
 #endif
   if (Z.on) {
     Z.st_timer += dt;

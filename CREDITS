@@ -1,0 +1,29 @@
+COFFEE & KILL credits
+
+The web version: weird.link/coffeekill. This cart is its port, with KEYHOLDER's people, weapons and places.
+
+Animations: Quaternius Universal Animation Library 1 and 2 (CC0), as credited by the web version. The
+KEYHOLDER bodies' clips are the same library, retargeted onto the VRM humanoid by DOLLY (KEYHOLDER's clips)
+and by tools/rig-vroid.mjs (the clips this game adds).
+Props: Kenney Survival and Factory kits (CC0), as credited by the web version.
+
+From KEYHOLDER (../keyholder, MIT; the code in src/kh and the assets in assets/kh):
+Characters: VRoid Project sample avatars. AvatarSample A, B and C via VRoid Hub (modification and
+redistribution allowed, credit not required), Sendagaya Shino and Sakurada Fumiriya (CC0), and the VRoid
+Studio CC0 samples (opengameart.org/content/vroid-studio-cc0-models), baked, recombined and palette swapped
+by KEYHOLDER's tools/prep-vrm.mjs.
+The lab: the HSL-108 model of HeatSync Labs, 108 West Main, Mesa, with its GPL-3.0 printer parts removed.
+Downtown Mesa: map data (c) OpenStreetMap contributors, Open Database License (openstreetmap.org/copyright);
+the street layout, footprints and placements in src/kh/gen/city_data.h are derived from it.
+Cars: Kenney Car Kit (CC0).
+Storefront geometry: src/kh/facades_mesa.inc is ported from BikeMesa by Luis Montes (MIT, notice in that
+file), github.com/monteslu/cartwheel-examples, games/bikemesa. Real businesses appear only as neutral
+scenery; names and logos belong to their owners, and none of them endorses this game. The sign artwork in
+assets/kh/city_signs.png was retrieved by BikeMesa from each venue's own site and scaled down (the list is
+in KEYHOLDER's CREDITS).
+
+Engine: three.js (MIT) by way of three.c, and wasmcart, by Luis Montes (MIT). canvas_ity by Andrew Kensler
+(ISC). dr_flac (MIT-0).
+Fonts: Archivo, IBM Plex Mono and JetBrains Mono, SIL Open Font License (assets/fonts/OFL.txt).
+
+This game is a story. HeatSync Labs does not settle anything by wrench, or by sword.

@@ -296,6 +296,7 @@ static void online_paint(void) {
   float y_r3 = y + 8; y = y_r3 + 34;
   float y_r4 = y + 8; y = y_r4 + 34;
   float y_r5 = y + 8; y = y_r5 + 34;
+  float y_nt = y + 6; y = y_nt + 14;
   float y_st = y + 10; y = y_st + sth;
   float y_lk = 0; float mb = 10;
   if (o->link_row) { y_lk = y + 10; y = y_lk + 41; mb = 8; }
@@ -345,7 +346,7 @@ static void online_paint(void) {
       chip_paint(c, x, cy + ry[k], ">", false); ol_ctl[nol_ctl++] = (hit_t){x, cy + ry[k], chip_w(">"), 34, kind[k], 1, 0, ""};
     }
     const char *note = "VERSUS THE WEB VERSION: MOHEEB AND LUIS IN THE WORKSHOP";
-    t_draw(c, F_TYPE, 11, 1.1f, cx + 628 - t_width(F_TYPE, 11, 1.1f, note), cy + y_r5 + 12 + t_asc(F_TYPE, 11), note, COLA(C_INK, 0.6f));
+    t_draw(c, F_TYPE, 11, 1.1f, cx, cy + y_nt + t_asc(F_TYPE, 11), note, COLA(C_INK, 0.6f));
   }
   /* status */
   for (int k = 0; k < ns; k++) t_draw(c, F_TYPE, 13, 1.82f, cx, cy + y_st + k * 17 + t_asc(F_TYPE, 13), st[k], COL(C_INK));
@@ -491,6 +492,12 @@ void scr_show(const char *id) {
 }
 
 void scr_frame(void) {
+  /* the lobby and the pads change from the network: repaint when what they show changed */
+  {
+    static ui_online_t ol_seen; static ui_pads_t pd_seen;
+    if (scr_cur && !strcmp(scr_cur, "s-online") && memcmp(&ol_seen, &ui_online, sizeof ol_seen)) { ol_seen = ui_online; online_paint(); }
+    if (scr_cur && !strcmp(scr_cur, "s-pads") && memcmp(&pd_seen, &ui_pads, sizeof pd_seen)) { pd_seen = ui_pads; pads_paint(); }
+  }
   /* the text fields: typing goes to the focused one (the page's inputs) */
   if (scr_cur && !strcmp(scr_cur, "s-online") && ui_online.focus) {
     const char *t; int n = input_text(&t);
