@@ -15,6 +15,10 @@
 #define CK_H 720
 #define CK_PI 3.14159265358979323846f
 
+/* points and directions in metres (y up), and flat ones (x, z) */
+typedef struct { float x, y, z; } v3;
+typedef struct { float x, y; } v2;
+
 /* Math.random(): a xorshift128+ seeded once at init (wc_set_seed) */
 void ck_seed(uint32_t s);
 float ck_rand(void);                       /* [0, 1) */

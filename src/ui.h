@@ -5,17 +5,19 @@
  * viewport (clamp() and vw/vh resolved there; the max-height:820px media
  * query applies at 720).
  *
- * Draw order (z-index): #vignette 2, #grain 3, #hud 4, #screens 5, #flash 6.
+ * Draw order (z-index): #vignette 2, #hud 4, #screens 5, #flash 6. The page's film grain
+ * (#grain, z 3) is left out: the cart renders clean.
  * ui_draw() draws all of those; the dance canvas (z 25) is dance.c's. */
 #ifndef CK_UI_H
 #define CK_UI_H
 #include <stdbool.h>
 #include <stdint.h>
 
-/* P.sel: the two fighter slots and the CPU level */
+/* P.sel: the two fighter slots, the CPU level and the stage */
 typedef struct {
-  struct { char ch[8]; char weapon[12]; } slots[2];   /* ch "moheeb" / "luis"; weapon "pipe" "spanner" "sledge" "crowbar" */
+  struct { char ch[12]; char weapon[12]; } slots[2];  /* roster and weapon keys (roster.h, weapons.h) */
   int level;                                          /* 0 ROOKIE, 1 JOURNEYMAN, 2 EXTREME */
+  int stage;                                          /* stage.h index */
 } ck_sel;
 
 /* the callbacks the app sets (A.cb) */
@@ -29,7 +31,7 @@ extern ui_callbacks ui_cb;
 
 void ui_init(void);
 void ui_frame(float dt);          /* CSS transitions and animations, timers (toast, fx) */
-void ui_draw(void);               /* vignette, grain, HUD, screens, flash */
+void ui_draw(void);               /* vignette, HUD, screens, flash */
 
 /* the current screen ("s-title", "s-select", "s-controls", "s-pause", "s-end",
  * "s-online", "s-pads", "s-load"), or NULL after hideAll */

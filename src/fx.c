@@ -48,7 +48,7 @@ static const char *FS =
   "    vec2 d = gl_PointCoord - 0.5; float r = length(d) * 2.0; if (r > 1.0) discard;\n"
   "    float a = smoothstep(1.0, 0.0, r); o = vec4(vc.rgb * (0.6 + 0.8 * a), vc.a * a); return; }\n"
   "  if (points == 0 || shape == 1) { vec4 s = texture(tex, t); if ((flags & 32) == 0) s.rgb = lin(s.rgb); c *= s; }\n"
-  "  if ((flags & 2) != 0) c.rgb = aces(c.rgb);\n"
+  "  if ((flags & 2) != 0 && expo > 0.0) c.rgb = aces(c.rgb);\n"
   "  if ((flags & 4) != 0) c.rgb = srgb(max(c.rgb, 0.0));\n"
   "  if ((flags & 1) != 0) { float f = 1.0 - exp(-fogd * fogd * vz * vz); c.rgb = mix(c.rgb, fogc, clamp(f, 0.0, 1.0)); }\n"
   "  o = c; }\n";

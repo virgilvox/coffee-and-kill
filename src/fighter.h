@@ -1,26 +1,16 @@
-/* fighter.h: a fighter (Y8 of the page), its moves (xC), the four weapons
- * (rs) and the CPU brain (vr, with the three levels of C8). */
+/* fighter.h: a fighter (Y8 of the page), its moves (xC) and the CPU brain (vr, with the
+ * three levels of C8). The body (body.h) is whoever the roster entry names; the weapon
+ * comes off the rack (weapons.h). */
 #ifndef CK_FIGHTER_H
 #define CK_FIGHTER_H
 #include <stdbool.h>
 #include "three.h"
 #include "anim.h"
 #include "input.h"
+#include "ck.h"
+#include "body.h"
+#include "weapons.h"
 
-typedef struct { float x, y, z; } v3;
-typedef struct { float x, y; } v2;
-
-/* rs: the weapons */
-typedef struct {
-  const char *key, *name, *tag, *desc;
-  float dmg, spd;
-  uint32_t trail;
-  bool sfx_heavy;
-  float len, r;      /* the built model's userData */
-} weapon_def;
-extern const weapon_def WEAPONS[4];         /* Hs order: pipe, spanner, sledge, crowbar */
-int weapon_index(const char *key);          /* -1 if unknown */
-t3_object *weapon_build(int w);             /* VT, qT, KT, _T */
 
 /* xC: the moves */
 enum { MV_L1, MV_L2, MV_L3, MV_H1, MV_H2, MV_H3, MV_KICK, MV_SPECIAL, MV_N };
@@ -34,7 +24,9 @@ extern const move_def MOVES[MV_N];
 int move_index(const char *id);             /* "L1" ... "SPECIAL", -1 if none */
 
 /* the fighter's states */
-enum { ST_IDLE, ST_MOVE, ST_BLOCK, ST_ATTACK, ST_DODGE, ST_HIT, ST_DOWN, ST_DEAD, ST_WIN };
+enum { ST_IDLE, ST_MOVE, ST_BLOCK, ST_ATTACK, ST_DODGE, ST_HIT, ST_DOWN, ST_DEAD, ST_WIN,
+       ST_SPECIAL };   /* a cinematic EXTREME (special.h): special.c moves the fighter */
+#define ST_N 10
 extern const char *STATE_NAMES[];
 int state_index(const char *name);
 
@@ -45,14 +37,16 @@ typedef struct { int r; float dmg; } hit_out;
 typedef struct { bool ok, miss, aoe; v3 point, dir, origin; } strike_t;
 
 typedef struct fighter {
-  const char *rig_key, *name;
-  t3_object *root, *model;
-  ck_rig *rig;
-  ck_mixer mixer;
+  int ri;                               /* the roster entry */
+  const char *name;
+  body *body;
+  t3_object *root;                      /* the body's root: place and turn */
+  const ck_rig *rig;
+  ck_mixer *mixer;
   t3_object *hand, *foot, *toe, *hips;
   int weapon_key;                       /* -1 none */
   const weapon_def *W;
-  t3_object *weapon_obj;                /* the holder under the hand */
+  t3_object *weapon_obj, *weapon_obj2;  /* the props in the right grip, and the left (paired weapons) */
   int slot;
   v3 vel; float yaw;
   ck_action *cur;
@@ -63,6 +57,7 @@ typedef struct fighter {
   int move;                             /* MV_* or -1 */
   int buf; float buf_t;                 /* the buffered input: 'L' 'H' 'K' 0 */
   bool hit_done, sp_done, recovering, won, paused, shown, block_hold;
+  bool special_req;                     /* asked for a cinematic EXTREME this frame: game.c starts it */
   int chain, combo; float combo_t, stun, dodge_cd, last_dmg;
   int hit_kind;                         /* REACT_* of the last hit */
   float move_spd, clip_dur, lunge_t, lunge_v, whoosh_at; bool whooshed;
@@ -75,7 +70,8 @@ typedef struct fighter {
 
 typedef struct { bool enabled; float dist_to; } fight_ctx;
 
-fighter *fighter_new(const char *rig_key, const char *name, float scale, const char *glb, const char *rig_asset);
+fighter *fighter_new(int roster_index);
+void fighter_free(fighter *f);
 void fighter_set_weapon(fighter *f, int w);
 void fighter_reset(fighter *f);
 ck_action *fighter_play(fighter *f, const char *clip, float time, bool once, float speed, float from, bool hold);

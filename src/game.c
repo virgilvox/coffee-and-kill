@@ -5,6 +5,11 @@
 #include "ck.h"
 #include "fighter.h"
 #include "arena.h"
+#include "stage.h"
+#include "roster.h"
+#include "weapons.h"
+#include "kh/kfx.h"
+#include "special.h"
 #include "gfx.h"
 #include "fx.h"
 #include "ui.h"
@@ -19,11 +24,9 @@
 #include <string.h>
 #include <math.h>
 
-/* yD, Rt, GC, Dv, AI */
-static const struct { const char *key, *rig, *name; } CHARS[2] = {{"moheeb", "b", "MOHEEB"}, {"luis", "a", "LUIS"}};
+/* Rt, GC, AI (the ring's radius, the page's Dv, is the stage's: stage_ring) */
 #define RT 2
 #define GC 60.0f
-#define DV 4.45f
 #define AI_X 2.3f
 
 enum { PH_LOAD, PH_MENU, PH_INTRO, PH_FIGHT, PH_KO, PH_BETWEEN, PH_MATCHEND, PH_DANCE };
@@ -33,8 +36,8 @@ static int ph_index(const char *n) { for (int i = 0; i < 8; i++) if (!strcmp(PH_
 static struct {
   t3_scene *scene;
   t3_camera *cam;
-  fighter *chars[2];            /* moheeb, luis */
-  fighter *f[2];                /* this.fighters */
+  fighter *f[2];                /* this.fighters: made for the picks, freed when no longer picked */
+  trail *trail[2];
   bool arena_ready;
   int net_role;
   int phase; float phase_t;
@@ -44,7 +47,9 @@ static struct {
   int wins[2], round;
   float time_left, slow, freeze, shake, cam_yaw;
   struct { v3 pos, look; } cs;
-  bool has_brain; brain br;
+  bool cpu[2]; int level[2];    /* who the CPU plays this match, and how well */
+  char label[2][12];            /* the HUD's tags: P1, P2, CPU */
+  bool has_brain[2]; brain br[2];
   float menu_orbit;
   int ko_winner; bool perfect;
   float t;
@@ -68,7 +73,7 @@ static struct {
 } G;
 
 static fighter *other(int i) { return G.f[1 - i]; }
-static int char_index(const char *k) { return !strcmp(k, "luis") ? 1 : 0; }
+static const char *fname(int slot) { return G.f[slot] ? G.f[slot]->name : roster_get(roster_index(G.sel.slots[slot].ch))->name; }
 
 /* ---------------------------------------------------------------- the online host's UI proxy (w3) */
 
@@ -133,9 +138,16 @@ static void sfx_tapped(const char *name, float a) {
 
 /* ---------------------------------------------------------------- setup */
 
+static int humans(void) { return !G.cpu[0] + !G.cpu[1]; }
 static void labels(const char **a, const char **b) {
   if (G.has_online_names) { *a = G.online_names[0]; *b = G.online_names[1]; return; }
-  *a = "P1"; *b = G.mode == 1 ? "CPU" : "P2";
+  *a = G.label[0]; *b = G.label[1];
+}
+/* who plays each side: a person (on the keyboard and pads, P1 first) or the CPU at a level */
+static void set_sides(bool cpu0, int lv0, const char *l0, bool cpu1, int lv1, const char *l1) {
+  G.cpu[0] = cpu0; G.level[0] = lv0; G.cpu[1] = cpu1; G.level[1] = lv1;
+  snprintf(G.label[0], sizeof G.label[0], "%s", l0 ? l0 : cpu0 ? "CPU" : "P1");
+  snprintf(G.label[1], sizeof G.label[1], "%s", l1 ? l1 : cpu1 ? "CPU" : cpu0 ? "P1" : "P2");
 }
 
 static void place_fighters(void) {
@@ -144,20 +156,43 @@ static void place_fighters(void) {
   t3_object_set_position(A->root, -AI_X, 0, 0); t3_object_set_position(P->root, AI_X, 0, 0);
   A->yaw = CK_PI / 2; P->yaw = -CK_PI / 2;
   t3_object_set_rotation(A->root, 0, A->yaw, 0); t3_object_set_rotation(P->root, 0, P->yaw, 0);
+  body_teleport(A->body); body_teleport(P->body);
   trail_clear(A->trail); trail_clear(P->trail);
 }
 
+/* the picks onto the two fighters: a fighter already made for a pick is kept (or swapped to its
+ * new side), one no longer picked is freed, a new pick is loaded */
 static void apply_sel(void) {
+  int want[2];
+  for (int t = 0; t < 2; t++) { want[t] = roster_index(G.sel.slots[t].ch); if (want[t] < 0) want[t] = t; }
+  if (G.f[0] && G.f[1] && G.f[0]->ri == want[1] && G.f[1]->ri == want[0] && want[0] != want[1]) {
+    fighter *x = G.f[0]; G.f[0] = G.f[1]; G.f[1] = x;
+  }
   for (int t = 0; t < 2; t++) {
-    fighter *e = G.chars[char_index(G.sel.slots[t].ch)];
-    G.f[t] = e;
-    e->slot = t;
-    fighter_set_weapon(e, weapon_index(G.sel.slots[t].weapon));
+    if (G.f[t] && G.f[t]->ri == want[t]) continue;
+    if (G.f[t]) fighter_free(G.f[t]);
+    G.f[t] = fighter_new(want[t]);
+    body_attach(G.f[t]->body, stage_scene());
+  }
+  for (int t = 0; t < 2; t++) {
+    fighter *e = G.f[t];
+    e->slot = t; e->trail = G.trail[t];
+    int w = weapon_index(G.sel.slots[t].weapon);
+    if (w < 0) w = 0;
+    if (e->weapon_key != w) fighter_set_weapon(e, w);
     trail_set_color(e->trail, e->W->trail);
+    body_blob_shadow(e->body, !stage_shadows());
   }
   const char *a, *b; labels(&a, &b);
-  gui_set_names(CHARS[char_index(G.sel.slots[0].ch)].name, CHARS[char_index(G.sel.slots[1].ch)].name, a, b);
+  gui_set_names(fname(0), fname(1), a, b);
   place_fighters();
+}
+
+/* the stage the match is on: the fighters and the effects move into its scene */
+static void use_stage(int s) {
+  if (stage_current() == s) return;
+  stage_load(s, 1);
+  for (int t = 0; t < 2; t++) if (G.f[t]) { body_attach(G.f[t]->body, stage_scene()); body_blob_shadow(G.f[t]->body, !stage_shadows()); }
 }
 
 static void menu_mode(void) {
@@ -165,14 +200,33 @@ static void menu_mode(void) {
 }
 
 static void start_round(void);
+static void start_match(void);
+/* a match on the picked stage: a stage that has to load first shows the loading card meanwhile */
+static int pending_stage = -1, pending_step;
+static void go_match(void) {
+  int s = G.sel.stage;
+  if (s < 0 || s >= STAGE_N) s = 0;
+  if (stage_current() == s || !stage_needs_load(s)) { use_stage(s); start_match(); return; }
+  pending_stage = s; pending_step = 0;
+  ui_show("s-load"); ui_load(0.1f, "walking over to the lab");
+}
+static bool pending_frame(void) {
+  if (pending_stage < 0) return false;
+  ui_load(0.1f + 0.4f * pending_step, NULL);
+  if (!stage_load(pending_stage, pending_step++)) return true;
+  pending_stage = -1;
+  for (int t = 0; t < 2; t++) if (G.f[t]) { body_attach(G.f[t]->body, stage_scene()); body_blob_shadow(G.f[t]->body, !stage_shadows()); }
+  ui_load(1, "ready");
+  start_match();
+  return true;
+}
 static void start_match(void) {
   G.wins[0] = G.wins[1] = 0; G.round = 1;
-  G.has_brain = G.mode == 1 && !G.net_role;
-  if (G.has_brain) brain_init(&G.br, G.sel.level);
-  input_mode = G.mode;
+  for (int i = 0; i < 2; i++) { G.has_brain[i] = G.cpu[i] && !G.net_role; if (G.has_brain[i]) brain_init(&G.br[i], G.level[i]); }
+  input_mode = G.cpu[0] || G.cpu[1] ? 1 : 2;
   gui_hide_all(); gui_hud(true);
   const char *a, *b; labels(&a, &b);
-  gui_set_names(CHARS[char_index(G.sel.slots[0].ch)].name, CHARS[char_index(G.sel.slots[1].ch)].name, a, b);
+  gui_set_names(fname(0), fname(1), a, b);
   gui_set_pips(0, 0); gui_set_pips(1, 0);
   start_round();
 }
@@ -180,13 +234,16 @@ static void start_match(void) {
 static void start_round(void) {
   place_fighters();
   for (int i = 0; i < 2; i++) { G.f[i]->hp = 100; G.f[i]->meter = fminf(G.f[i]->meter, 0); }
+#ifdef CK_TEST_METER   /* test builds: both start with a full EXTREME meter */
+  for (int i = 0; i < 2; i++) G.f[i]->meter = 100;
+#endif
   G.time_left = GC; G.slow = 1; G.freeze = 0; G.shake = 0; G.ko_winner = -1; G.perfect = false;
   ui_set_health(0, 100, true); ui_set_health(1, 100, true); ui_set_meter(0, 0); ui_set_meter(1, 0);
   ui_set_timer(GC);
   char r[24]; snprintf(r, sizeof r, "ROUND %d", G.round);
   gui_set_round(r);
   gui_combo(0, 0, NULL); gui_combo(1, 0, NULL);
-  gui_set_hint(G.mode == 1 ? "WASD move   Q light   E heavy   R kick   SPACE block   SHIFT dodge   F extreme"
+  gui_set_hint(input_mode == 1 ? "WASD move   Q light   E heavy   R kick   SPACE block   SHIFT dodge   F extreme"
                            : "P1: WASD Q E R SPACE SHIFT F     P2: ARROWS , . / R-SHIFT ENTER '");
   G.phase = PH_INTRO; G.phase_t = 0; G.intro_stage = 0; G.cam_snap = true;
   gui_announce(r, G.round == RT * 2 - 1 ? "FINAL ROUND" : "");
@@ -209,9 +266,10 @@ static void finish_match(void) {
     if (G.net_role) {
       if (G.has_online_names) snprintf(sub, sizeof sub, "%s TAKES THE SHOP", G.online_names[D]);
       else snprintf(sub, sizeof sub, "ONLINE VERSUS");
-    } else if (G.mode == 1) snprintf(sub, sizeof sub, D == 0 ? "THE SHOP IS YOURS" : "THE SHOP WINS THIS ONE");
+    } else if (G.cpu[0] && G.cpu[1]) snprintf(sub, sizeof sub, "THE CPU TAKES THE SHOP");
+    else if (G.cpu[0] || G.cpu[1]) snprintf(sub, sizeof sub, !G.cpu[D] ? "THE SHOP IS YOURS" : "THE SHOP WINS THIS ONE");
     else snprintf(sub, sizeof sub, "PLAYER %d TAKES THE SHOP", D + 1);
-    gui_set_end(CHARS[char_index(G.sel.slots[D].ch)].name, true, sub);
+    gui_set_end(fname(D), true, sub);
     sfx_win();
   }
   gui_show("s-end"); G.phase = PH_MATCHEND; gui_clear_announce();
@@ -239,12 +297,13 @@ static void dance_moved(int A, int P, int e) {
 }
 
 static void dance_begin(uint32_t A) {
-  const char *P0 = CHARS[char_index(G.sel.slots[0].ch)].name, *P1 = CHARS[char_index(G.sel.slots[1].ch)].name;
+  const char *P0 = fname(0), *P1 = fname(1);
   dance_player e[2]; int n;
   if (G.net_role == NET_HOST) { e[0] = (dance_player){P0, DP_HUMAN, 0, 0}; e[1] = (dance_player){P1, DP_REMOTE, 0, 0}; n = 2; }
   else if (G.net_role == NET_GUEST) { e[0] = (dance_player){P0, DP_REMOTE, 0, 0}; e[1] = (dance_player){P1, DP_HUMAN, 0, 0}; n = 2; }
-  else if (G.mode == 2) { e[0] = (dance_player){P0, DP_HUMAN, 0, 0}; e[1] = (dance_player){P1, DP_HUMAN, 1, 0}; n = 2; }
-  else { e[0] = (dance_player){P0, DP_HUMAN, 0, 0}; n = 1; }
+  else if (humans() == 2) { e[0] = (dance_player){P0, DP_HUMAN, 0, 0}; e[1] = (dance_player){P1, DP_HUMAN, 1, 0}; n = 2; }
+  else if (!G.cpu[0]) { e[0] = (dance_player){P0, DP_HUMAN, 0, 0}; n = 1; }
+  else { e[0] = (dance_player){P1, DP_HUMAN, 0, 0}; n = 1; }
   dance_on_move = dance_moved;
   ui_hud(false);
   dance_start(A, e, n, online_in_match() ? dance_net_send : NULL);
@@ -263,14 +322,14 @@ static void start_dance(void) {
   A->yaw = 0; P->yaw = 0; t3_object_set_rotation(A->root, 0, 0, 0); t3_object_set_rotation(P->root, 0, 0, 0);
   trail_clear(A->trail); trail_clear(P->trail);
   G.cam_snap = true; G.dance_idle_t[0] = G.dance_idle_t[1] = 0;
-  bool e = !G.net_role && G.mode == 1;
+  bool e = !G.net_role && humans() == 1;
   gui_announce(e ? "DANCE BREAK" : "DANCE BATTLE", e ? "GRADE TO CHARGE EXTREME. ESC SKIPS" : "HIT THE ARROWS");
   announce_clear_at = ck_now() + 1.8;
   dance_begin(G.dance_seed);
 }
 
 static void skip_dance(void) {
-  if (G.phase != PH_DANCE || G.net_role || G.mode != 1 || !dance_active() || G.has_dance_res) return;
+  if (G.phase != PH_DANCE || G.net_role || humans() != 1 || !dance_active() || G.has_dance_res) return;
   dance_cancel();
   memset(&G.dance_res, 0, sizeof G.dance_res);
   G.dance_res.skip = true; G.dance_res.winner = -1; G.has_dance_res = true;
@@ -394,6 +453,31 @@ static void resolve(fighter *A, fighter *P) {
   }
 }
 
+/* a blow of a cinematic EXTREME (special.c): a hit that breaks guards, the last one knocks down */
+static void special_blow(fighter *A, fighter *P, float dmg, bool last, v3 point, v3 dir) {
+  if (G.phase != PH_FIGHT || P->state == ST_DEAD) return;
+  P->inv = 0; P->chain = 0;
+  if (P->state == ST_BLOCK) P->state = ST_IDLE;
+  hit_in h = {dmg, last ? 7 : 1.5f, dir, last ? 1.1f : 0.7f, last ? REACT_DOWN : REACT_HEAVY, true};
+  hit_out i = fighter_take_hit(P, &h);
+  float r[3] = {point.x, point.y, point.z}, v[2] = {dir.x, dir.z};
+  if (i.r != HIT_HIT && i.r != HIT_KO) return;
+  A->combo++; A->combo_t = 1.3f;
+  fx_ev("hit", r, NULL, v, true, i.dmg, false);
+  gui_flash(last ? 0xffffff : A->W->trail, last ? 0.5f : 0.15f, last ? 240 : 110);
+  G.shake = fmaxf(G.shake, last ? 1.1f : 0.5f);
+  if (A->combo >= 2) gui_combo(A->slot, A->combo, A->combo >= 5 ? "ABSOLUTELY EXTREME" : A->combo >= 3 ? "NICE" : "");
+  if (i.r == HIT_KO) {
+    special_stop();
+    if (A->state == ST_SPECIAL) { A->state = ST_IDLE; fighter_play(A, "Sword_Idle", 0.16f, false, 1, 0, true); }
+    G.phase = PH_KO; G.phase_t = 0; G.slow = 0.28f; G.freeze = 0.25f; G.shake = 0.6f;
+    G.ko_winner = A->slot; G.perfect = A->hp >= 99.9f;
+    gui_announce("K.O.", G.perfect ? "PERFECT" : "");
+    sfx_ko(); gui_flash(0xffffff, 0.6f, 300);
+    fx_ev("ko", r, NULL, NULL, false, 0, false);
+  }
+}
+
 static void separate(void) {
   fighter *A = G.f[0], *P = G.f[1];
   v3 *a = fighter_pos(A), *p = fighter_pos(P);
@@ -403,6 +487,7 @@ static void separate(void) {
     float g = (w - D) / 2, i = e / D, n = t / D;
     a->x -= i * g; a->z -= n * g; p->x += i * g; p->z += n * g;
   }
+  const float DV = stage_ring();
   for (int k = 0; k < 2; k++) {
     fighter *g = G.f[k];
     v3 *q = fighter_pos(g);
@@ -443,7 +528,7 @@ static void phase_logic(float A) {
       if (G.phase_t > 2.6f) {
         gui_clear_announce();
         if (G.match_over) finish_match();
-        else if (G.dance_on && G.net_role != NET_GUEST) start_dance();
+        else if (G.dance_on && G.net_role != NET_GUEST && humans() > 0) start_dance();
         else { G.round++; start_round(); }
       }
       break;
@@ -455,8 +540,9 @@ static void update_trails(void) {
   for (int k = 0; k < 2; k++) {
     fighter *P = G.f[k];
     int e = P->move;
-    if (P->state == ST_ATTACK && e >= 0 && !P->recovering && P->cur && P->cur->time > MOVES[e].hit0 - 0.08f &&
-        P->cur->time < MOVES[e].hit1 + 0.1f && !MOVES[e].foot && P->weapon_obj) {
+    bool sp = special_attacker() == P && special_time() > .5f;   /* a cinematic EXTREME swings all the way */
+    if ((sp || (P->state == ST_ATTACK && e >= 0 && !P->recovering && P->cur && P->cur->time > MOVES[e].hit0 - 0.08f &&
+        P->cur->time < MOVES[e].hit1 + 0.1f && !MOVES[e].foot)) && P->weapon_obj) {
       v3 D, w; fighter_weapon_segment(P, &D, &w);
       trail_push(P->trail, (gv3){D.x, D.y, D.z}, (gv3){w.x, w.y, w.z});
     } else trail_decay(P->trail);
@@ -478,6 +564,7 @@ static void update_camera(float A) {
   v3 w, g;
   v3 n = {(pp->x + ep->x) / 2, 0, (pp->z + ep->z) / 2};
   float r = hypotf(pp->x - ep->x, pp->z - ep->z);
+  bool clip = true;
   if (G.phase == PH_MENU || G.phase == PH_LOAD) {
     G.menu_orbit += A * 0.12f;
     const char *scr = ui_screen();
@@ -511,8 +598,11 @@ static void update_camera(float A) {
     }
     for (int k = 0; k < 2; k++) if (G.f[k]->state == ST_ATTACK && G.f[k]->move == MV_SPECIAL) { a *= 0.85f; break; }
     w = (v3){n.x - zy * a, c, n.z + zx * a}; g = (v3){n.x, Q, n.z};
-    w.x = ck_clamp(w.x, -ROOM_HX + 1, ROOM_HX - 1); w.z = ck_clamp(w.z, -ROOM_HZ + 1, ROOM_HZ - 1);
   }
+  float fov = 40;
+  if (special_camera(&w, &g, &fov)) { G.cs.pos = w; G.cs.look = g; clip = true; }
+  if (clip) stage_camera(g, &w);
+  if (fabsf(fov - G.cam->fov) > 0.01f) { G.cam->fov = fov; t3_camera_update_projection_matrix(G.cam); }
   if (G.cam_snap || G.phase == PH_LOAD) { G.cs.pos = w; G.cs.look = g; G.cam_snap = false; }
   else {
     float v = 1 - expf(-A * (G.phase == PH_MENU ? 3 : 6));
@@ -535,9 +625,9 @@ static void post_fx(float A, float P) {
   bursts_update(A); rings_update(A);
   if (G.arena_ready) {
     v3 *a = fighter_pos(e), *b = fighter_pos(t);
-    arena_set_focus((a->x + b->x) / 2, 1.2f, (a->z + b->z) / 2);
-    arena_update(A, G.t);
+    stage_update(A, G.t, (v3){(a->x + b->x) / 2, 1.2f, (a->z + b->z) / 2});
   }
+  kfx_update(A, G.cam);
   update_hud();
   update_camera(A);
   G.shake *= powf(1e-3f, A);
@@ -561,19 +651,39 @@ static void step(float A) {
   bool D = G.phase == PH_FIGHT;
   intent_t i[2] = {{0}, {0}}; v2 n[2] = {{0, 0}, {0, 0}};
   if (D) {
-    i[0] = input_poll(0); n[0] = mv_from(i[0].mx, i[0].my);
+    if (!G.cpu[0]) { i[0] = input_poll(0); n[0] = mv_from(i[0].mx, i[0].my); }
     if (G.net_role == NET_HOST) { i[1] = remote_intent(); n[1] = mv_from(i[1].mx, i[1].my); }
-    else if (G.mode == 2) { i[1] = input_poll(1); n[1] = mv_from(i[1].mx, i[1].my); }
-    else if (G.has_brain) {
-      v2 wv; i[1] = brain_think(&G.br, P, t, e, &wv);
+    else if (!G.cpu[1]) { i[1] = input_poll(G.cpu[0] ? 0 : 1); n[1] = mv_from(i[1].mx, i[1].my); }
+    for (int k = 0; k < 2; k++) if (G.has_brain[k]) {
+      v2 wv; i[k] = brain_think(&G.br[k], P, G.f[k], G.f[1 - k], &wv);
       float l = sqrtf(wv.x * wv.x + wv.y * wv.y); if (l > 1) { wv.x /= l; wv.y /= l; }
-      n[1] = wv;
+      n[k] = wv;
     }
   }
   float r = hypotf(fighter_pos(e)->x - fighter_pos(t)->x, fighter_pos(e)->z - fighter_pos(t)->z);
   fight_ctx ctx = {D, r};
-  fighter_update(e, P, &i[0], n[0], t, &ctx);
-  fighter_update(t, P, &i[1], n[1], e, &ctx);
+  /* a cinematic EXTREME holds the world still around the one who threw it */
+  float rate[2] = {P, P};
+  if (special_active()) {
+    float ra, rw; special_rates(&ra, &rw);
+    for (int k = 0; k < 2; k++) rate[k] = G.f[k] == special_attacker() ? A * ra : A * rw;
+    i[0] = i[1] = (intent_t){0}; n[0] = n[1] = (v2){0, 0};
+  }
+  fighter_update(e, rate[0], &i[0], n[0], t, &ctx);
+  fighter_update(t, rate[1], &i[1], n[1], e, &ctx);
+  for (int k = 0; k < 2; k++) if (G.f[k]->special_req) {
+    G.f[k]->special_req = false;
+    if (!special_active() && D) {
+      special_start(G.f[k], G.f[1 - k]);
+      gui_announce("EXTREME", special_name(G.f[k]->W->special)); announce_clear_at = ck_now() + 1.1;
+      gui_flash(G.f[k]->W->trail, 0.18f, 200);
+    }
+    else { G.f[k]->state = ST_IDLE; fighter_play(G.f[k], "Sword_Idle", 0.12f, false, 1, 0, true); }
+  }
+  if (special_active()) special_update(A);
+  for (int k = 0; k < 2; k++) if (G.f[k]->state == ST_SPECIAL && special_attacker() != G.f[k]) {
+    G.f[k]->state = ST_IDLE; fighter_play(G.f[k], "Sword_Idle", 0.16f, false, 1, 0, true);
+  }
   separate();
   if (D) { resolve(e, t); resolve(t, e); }
   G.phase_t += A;
@@ -590,8 +700,7 @@ static void step_dance(float A) {
     fighter *D = G.f[w];
     if (D->cur && t - G.dance_idle_t[w] > 650 && strcmp(fighter_clip_name(D), "Sword_Idle"))
       fighter_play(D, "Sword_Idle", 0.2f, false, 1, 0, true);
-    mixer_update(&D->mixer, A);
-    t3_object_update_matrix_world(D->root, true);
+    body_animate(D->body, A);
   }
   dance_result r;
   if (!G.has_dance_res && dance_take_result(&r)) { G.dance_res = r; G.has_dance_res = true; }
@@ -602,15 +711,16 @@ static void step_dance(float A) {
     char s[64];
     if (D.skip) gui_toast("DANCE SKIPPED");
     else if (D.solo) {
-      fighter *w = G.f[0];
-      w->meter = (float)D.meter; ui_set_meter(0, (float)D.meter);
+      int hs = G.cpu[0] ? 1 : 0;
+      fighter *w = G.f[hs];
+      w->meter = (float)D.meter; ui_set_meter(hs, (float)D.meter);
       if (D.meter) snprintf(s, sizeof s, "DANCE GRADE %s  EXTREME +%d", D.grade, D.meter);
       else snprintf(s, sizeof s, "DANCE GRADE %s", D.grade);
       gui_toast(s);
     } else if (D.winner >= 0) {
       fighter *w = G.f[D.winner];
       w->meter = 70; ui_set_meter(D.winner, 70);
-      snprintf(s, sizeof s, "%s STARTS CHARGED", CHARS[char_index(G.sel.slots[D.winner].ch)].name);
+      snprintf(s, sizeof s, "%s STARTS CHARGED", fname(D.winner));
       gui_toast(s);
     }
   }
@@ -805,8 +915,7 @@ static void step_guest(float A) {
     }
     #undef N
     #undef S
-    mixer_update(&g->mixer, A);
-    t3_object_update_matrix_world(g->root, true);
+    body_animate(g->body, A);
   }
   post_fx(A, A);
   if (dance_active()) dance_update(A);
@@ -831,12 +940,14 @@ void game_begin_online(int role, const char *my_name, const char *my_weapon, con
   for (int i = 0; i < G.nev; i++) mp_free(G.evbuf[i].e);
   G.nev = 0;
   bool t = role == NET_HOST;
-  snprintf(G.sel.slots[0].ch, 8, "moheeb"); snprintf(G.sel.slots[0].weapon, 12, "%s", t ? my_weapon : opp_weapon);
-  snprintf(G.sel.slots[1].ch, 8, "luis"); snprintf(G.sel.slots[1].weapon, 12, "%s", t ? opp_weapon : my_weapon);
+  snprintf(G.sel.slots[0].ch, 12, "moheeb"); snprintf(G.sel.slots[0].weapon, 12, "%s", t ? my_weapon : opp_weapon);
+  snprintf(G.sel.slots[1].ch, 12, "luis"); snprintf(G.sel.slots[1].weapon, 12, "%s", t ? opp_weapon : my_weapon);
+  G.cpu[0] = G.cpu[1] = false;
+  use_stage(0);
   G.has_online_names = true;
   snprintf(G.online_names[0], 16, "%s", t ? my_name : opp_name);
   snprintf(G.online_names[1], 16, "%s", t ? opp_name : my_name);
-  G.has_brain = false; G.paused = false;
+  G.has_brain[0] = G.has_brain[1] = false; G.paused = false;
   memset(G.guest_counts, 0, sizeof G.guest_counts); G.int_timer = 0;
   apply_sel();
   ui_hide_all(); ui_hud(true);
@@ -865,6 +976,7 @@ void game_leave_online(const char *A) {
 static void act(const char *v) {
   if (!strcmp(v, "1p") || !strcmp(v, "2p")) {
     G.mode = v[0] == '1' ? 1 : 2; input_mode = G.mode;
+    set_sides(false, 0, NULL, G.mode == 1, G.sel.level, NULL);
     ui_set_select(&G.sel, G.mode); apply_sel(); ui_show("s-select");
   } else if (!strcmp(v, "online")) online_open();
   else if (!strcmp(v, "onback")) { online_back(); ui_show("s-title"); }
@@ -882,9 +994,9 @@ static void act(const char *v) {
   else if (!strcmp(v, "back")) {
     const char *s = ui_screen();
     if (s && !strcmp(s, "s-controls")) ui_show(G.screen_before_controls); else ui_show("s-title");
-  } else if (!strcmp(v, "start")) start_match();
+  } else if (!strcmp(v, "start")) go_match();
   else if (!strcmp(v, "resume")) toggle_pause();
-  else if (!strcmp(v, "quit")) { G.paused = false; menu_mode(); ui_show("s-title"); }
+  else if (!strcmp(v, "quit")) { G.paused = false; use_stage(0); menu_mode(); ui_show("s-title"); }
   else if (!strcmp(v, "rematch")) {
     if (G.net_role == NET_GUEST) { mp_val *c = mp_map(); mp_set(c, "k", mp_str("rm")); online_ctl(c); ui_toast("REMATCH REQUESTED"); }
     else start_match();
@@ -895,11 +1007,11 @@ static void act(const char *v) {
 }
 static void cb_weapon(int p, const char *w) { snprintf(G.sel.slots[p].weapon, 12, "%s", w); apply_sel(); }
 static void cb_swap(void) {
-  char a[8]; snprintf(a, 8, "%s", G.sel.slots[0].ch);
-  snprintf(G.sel.slots[0].ch, 8, "%s", G.sel.slots[1].ch); snprintf(G.sel.slots[1].ch, 8, "%s", a);
+  char a[12]; snprintf(a, sizeof a, "%s", G.sel.slots[0].ch);
+  snprintf(G.sel.slots[0].ch, 12, "%s", G.sel.slots[1].ch); snprintf(G.sel.slots[1].ch, 12, "%s", a);
   apply_sel();
 }
-static void cb_diff(int l) { G.sel.level = l; }
+static void cb_diff(int l) { G.sel.level = l; G.level[1] = l; }
 
 /* the window keydown handler of the page: Escape skips the dance, Escape or P
  * pauses, M mutes, N toggles the music */
@@ -944,14 +1056,31 @@ static void pad_keys(void) {
 void game_init(void) {
   memset(&G, 0, sizeof G);
   G.phase = PH_LOAD; G.mode = 1; G.dance_on = true; G.last_track = -1; G.ko_winner = -1; G.slow = 1;
-  snprintf(G.sel.slots[0].ch, 8, "moheeb"); snprintf(G.sel.slots[0].weapon, 12, "pipe");
-  snprintf(G.sel.slots[1].ch, 8, "luis"); snprintf(G.sel.slots[1].weapon, 12, "sledge");
+  snprintf(G.sel.slots[0].ch, 12, "moheeb"); snprintf(G.sel.slots[0].weapon, 12, "pipe");
+  snprintf(G.sel.slots[1].ch, 12, "luis"); snprintf(G.sel.slots[1].weapon, 12, "sledge");
   G.sel.level = 1;
+  /* test builds: EXTRA_CFLAGS='-DCK_PICK0="vee" -DCK_WEAPON0="arc" -DCK_PICK1=... -DCK_STAGE=3' */
+#ifdef CK_PICK0
+  snprintf(G.sel.slots[0].ch, 12, "%s", CK_PICK0);
+#endif
+#ifdef CK_PICK1
+  snprintf(G.sel.slots[1].ch, 12, "%s", CK_PICK1);
+#endif
+#ifdef CK_WEAPON0
+  snprintf(G.sel.slots[0].weapon, 12, "%s", CK_WEAPON0);
+#endif
+#ifdef CK_WEAPON1
+  snprintf(G.sel.slots[1].weapon, 12, "%s", CK_WEAPON1);
+#endif
+#ifdef CK_STAGE
+  G.sel.stage = CK_STAGE;
+#endif
   fx_init(); gfx_init(); ui_init(); dance_init(); online_init();
   ui_cb.act = act; ui_cb.weapon = cb_weapon; ui_cb.swap = cb_swap; ui_cb.diff = cb_diff;
   sfx_tap = sfx_tapped;
-  G.scene = t3_scene_new();
-  arena_scene_setup(CK_R, G.scene);
+  special_on_blow = special_blow;
+  stage_init(CK_R);
+  for (int i = 0; i < 2; i++) G.trail[i] = trail_new(16777215, 16);
   /* new Ae(40, 1, .1, 80) at (0, 2, 7); resize: fov 40 at 16:9 */
   G.cam = t3_perspective_camera_new(40, (float)CK_W / CK_H, 0.1f, 80);
   t3_object_set_position(G.cam, 0, 2, 7);
@@ -964,20 +1093,14 @@ void game_init(void) {
 bool game_boot(int stage) {
   switch (stage) {
     case 0: ui_load(0.05f, "loading fighters"); return false;
-    case 1: G.chars[1] = fighter_new("a", "LUIS", 1.04f, "char_a.glb", "rig_a.bin"); return false;
-    case 2: G.chars[0] = fighter_new("b", "MOHEEB", 0.97f, "char_b.glb", "rig_b.bin"); ui_load(0.35f, "retargeting animation"); return false;
-    case 3: ui_load(0.5f, "building the hackerspace"); return false;
+    case 1: ui_load(0.35f, "building the hackerspace"); return false;
     default: break;
   }
   if (!G.arena_ready) {
-    if (!arena_build(G.scene, stage - 4)) return false;
+    if (!stage_load(0, stage - 2)) return false;
     G.arena_ready = true;
     ui_load(0.8f, "lighting up");
     return false;
-  }
-  for (int i = 0; i < 2; i++) {
-    t3_object_add((t3_object *)G.scene, G.chars[i]->root);
-    G.chars[i]->trail = trail_new(16777215, 16);
   }
   apply_sel();
   ui_load(1, "ready");
@@ -1005,6 +1128,7 @@ void game_frame(float dt) {
   if (announce_clear_at > 0 && ck_now() >= announce_clear_at) { announce_clear_at = -1; gui_clear_announce(); }
 
   online_update(dt);
+  if (pending_frame()) return;
   if (G.phase != PH_LOAD) {
     G.t += dt;
     if (!G.paused) step(dt);
@@ -1013,10 +1137,10 @@ void game_frame(float dt) {
 
 void game_draw(void) {
   if (G.arena_ready && G.phase != PH_LOAD) {
-    render_scene(G.scene, G.cam);
-    fx_frame(G.cam, 0.011f, 1447965, 1.05f);
+    render_scene(stage_scene(), G.cam);
+    stage_fx_frame(G.cam);
     fx_begin();
-    arena_fx_draw();
+    stage_fx_draw();
     trail *tr[2] = {G.f[0] ? G.f[0]->trail : NULL, G.f[1] ? G.f[1]->trail : NULL};
     gfx_draw(tr, 2);
     fx_end();

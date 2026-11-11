@@ -1,112 +1,17 @@
-/* fighter.c: see fighter.h. Y8, xC, rs (VT qT KT _T), vr and C8 of the page,
- * line for line; comments name the page's fields where they differ. */
+/* fighter.c: see fighter.h. Y8, xC, vr and C8 of the page, line for line; comments name
+ * the page's fields where they differ. The weapons' builders are in weapons.c, the
+ * fighter's model in body.c. */
 #include "fighter.h"
 #include "geom.h"
 #include "audio.h"
 #include "ck.h"
+#include "special.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
-const char *STATE_NAMES[] = {"idle", "move", "block", "attack", "dodge", "hit", "down", "dead", "win"};
-int state_index(const char *n) { for (int i = 0; i < 9; i++) if (!strcmp(STATE_NAMES[i], n)) return i; return ST_IDLE; }
-
-/* ---------------------------------------------------------------- weapons */
-
-const weapon_def WEAPONS[4] = {
-  {"pipe", "PIPE WRENCH", "BALANCED", "Red steel. Solid on every count.", 1, 1, 16730682, false, 0.52f, 0.14f},
-  {"spanner", "BIG SPANNER", "FAST", "Chrome combination wrench. Quick hands.", 0.82f, 1.22f, 13625343, false, 0.36f, 0.12f},
-  {"sledge", "SLEDGE", "HEAVY", "Slow swing. Big dents.", 1.5f, 0.8f, 16756768, true, 0.74f, 0.17f},
-  {"crowbar", "CROWBAR", "REACH", "Long and mean. Hooks in from range.", 1.1f, 0.95f, 15903518, false, 0.62f, 0.13f},
-};
-int weapon_index(const char *k) { for (int i = 0; i < 4; i++) if (k && !strcmp(WEAPONS[i].key, k)) return i; return -1; }
-
-/* ns(color, metalness .8, roughness .4): MeshStandardMaterial. The builders'
- * materials are listed and released once the weapon is built (the meshes keep
- * what they use). */
-static t3_material *made[64]; static int nmade;
-static t3_material *keep(t3_material *m) { if (nmade < 64) made[nmade++] = m; return m; }
-static void release_made(void) { for (int i = 0; i < nmade; i++) t3_release(made[i]); nmade = 0; }
-static t3_material *ns(uint32_t c, float m, float r) {
-  t3_material *mt = t3_mesh_standard_material_new(c);
-  mt->metalness = m; mt->roughness = r;
-  return keep(mt);
-}
-static t3_material *ha(void) { return ns(11844806, 0.95f, 0.28f); }
-static t3_material *eo(void) { return ns(3883080, 0.9f, 0.4f); }
-static t3_material *to(uint32_t c) { return ns(c, 0.25f, 0.55f); }
-/* ge(geometry, material, x, y, z): a shadow casting mesh */
-static t3_mesh *ge(t3_object *parent, t3_geometry *g, t3_material *m, float x, float y, float z) {
-  t3_mesh *me = t3_mesh_new(g, m);
-  t3_object_set_position(me, x, y, z);
-  ((t3_object *)me)->cast_shadow = true;
-  t3_object_add(parent, me);
-  t3_release(me); t3_release(g);
-  return me;
-}
-static t3_geometry *cyl(float rt, float rb, float h, int rs) { return t3_cylinder_geometry_new(rt, rb, h, rs, 1, false); }
-static t3_geometry *box(float w, float h, float d) { return t3_box_geometry_new(w, h, d, 1, 1, 1); }
-
-static t3_object *build_pipe(void) {   /* VT */
-  t3_object *s = t3_object_new();
-  t3_material *A = to(13116955), *P = ha();
-  ge(s, cyl(0.019f, 0.026f, 0.58f, 16), A, 0, 0.11f, 0);
-  ge(s, cyl(0.028f, 0.028f, 0.04f, 16), eo(), 0, -0.19f, 0);
-  ge(s, box(0.075f, 0.2f, 0.046f), A, 0, 0.43f, 0);
-  ge(s, box(0.115f, 0.05f, 0.046f), A, 0.02f, 0.545f, 0);
-  ge(s, box(0.03f, 0.06f, 0.046f), A, 0.065f, 0.51f, 0);
-  ge(s, box(0.032f, 0.13f, 0.04f), P, -0.04f, 0.47f, 0);
-  for (int t = 0; t < 5; t++) ge(s, box(0.012f, 8e-3f, 0.04f), P, -0.016f, 0.42f + t * 0.025f, 0);
-  t3_mesh *e = ge(s, cyl(0.04f, 0.04f, 0.034f, 20), P, -5e-3f, 0.33f, 0);
-  t3_object_set_rotation(e, CK_PI / 2, 0, 0);
-  for (int t = 0; t < 14; t++) {
-    float D = t / 14.f * CK_PI * 2;
-    ge(s, box(6e-3f, 6e-3f, 0.036f), eo(), -5e-3f + cosf(D) * 0.04f, 0.33f + sinf(D) * 0.04f, 0);
-  }
-  return s;
-}
-static t3_object *build_spanner(void) {   /* qT */
-  t3_object *s = t3_object_new();
-  static const float A[14][2] = {{-0.013f, -0.36f}, {0.013f, -0.36f}, {0.019f, -0.05f}, {0.05f, 0}, {0.05f, 0.07f}, {0.027f, 0.105f},
-    {0.017f, 0.105f}, {0.017f, 0.05f}, {-0.017f, 0.05f}, {-0.017f, 0.105f}, {-0.027f, 0.105f}, {-0.05f, 0.07f}, {-0.05f, 0}, {-0.019f, -0.05f}};
-  t3_geometry *e = geom_extrude(&A[0][0], 14, 0.018f, true, 4e-3f, 4e-3f, 2);
-  t3_geometry_translate(e, 0, 0.19f, -9e-3f);
-  t3_geometry_scale(e, 1.55f, 1.55f, 1.55f);
-  ge(s, e, ns(14147044, 0.85f, 0.22f), 0, 0, 0);
-  ge(s, t3_torus_geometry_new(0.018f, 6e-3f, 8, 16, CK_PI * 2), ns(14147044, 1, 0.2f), 0, -0.27f, 0);
-  return s;
-}
-static t3_object *build_sledge(void) {   /* KT */
-  t3_object *s = t3_object_new();
-  ge(s, cyl(0.021f, 0.026f, 0.98f, 14), ns(11105594, 0.05f, 0.8f), 0, 0.3f, 0);
-  ge(s, cyl(0.028f, 0.028f, 0.34f, 14), ns(1907997, 0.1f, 0.9f), 0, -0.02f, 0);
-  ge(s, box(0.3f, 0.12f, 0.12f), eo(), 0, 0.72f, 0);
-  for (int e = -1; e <= 1; e += 2) {
-    t3_mesh *t = ge(s, cyl(0.066f, 0.066f, 0.03f, 18), ha(), e * 0.16f, 0.72f, 0);
-    t3_object_set_rotation(t, 0, 0, CK_PI / 2);
-  }
-  ge(s, box(0.06f, 0.13f, 0.13f), to(15903518), 0, 0.72f, 0);
-  return s;
-}
-static t3_object *build_crowbar(void) {   /* _T */
-  t3_object *s = t3_object_new();
-  t3_vec3 A[18]; int n = 0;
-  A[n++] = t3_v3(0, -0.22f, 0); A[n++] = t3_v3(0, 0, 0); A[n++] = t3_v3(0, 0.46f, 0);
-  float P = 0.075f, e = P, t = 0.6f;
-  for (int g = 0; g <= 14; g++) {
-    float i = CK_PI - g / 14.f * CK_PI * 0.85f;
-    A[n++] = t3_v3(e + cosf(i) * P, t + sinf(i) * P * 1.3f, 0);
-  }
-  ge(s, geom_tube(A, n, false, 0, 0.2f, 48, 0.017f, 10, false), ns(3093563, 0.85f, 0.45f), 0, 0, 0);
-  ge(s, cyl(0.019f, 0.019f, 0.18f, 10), to(15903518), 0, 0.18f, 0);
-  ge(s, box(0.05f, 0.07f, 0.012f), ns(3093563, 0.85f, 0.45f), 0, -0.24f, 0);
-  return s;
-}
-t3_object *weapon_build(int w) {
-  t3_object *o = w == 0 ? build_pipe() : w == 1 ? build_spanner() : w == 2 ? build_sledge() : build_crowbar();
-  release_made();
-  return o;
-}
+const char *STATE_NAMES[] = {"idle", "move", "block", "attack", "dodge", "hit", "down", "dead", "win", "special"};
+int state_index(const char *n) { for (int i = 0; i < ST_N; i++) if (!strcmp(STATE_NAMES[i], n)) return i; return ST_IDLE; }
 
 /* ---------------------------------------------------------------- moves */
 
@@ -126,69 +31,43 @@ int move_index(const char *id) { for (int i = 0; i < MV_N; i++) if (id && !strcm
 
 static const char *HIT_CLIPS[5] = {"Hit_Chest", "Hit_Head", "Hit_Stomach", "Hit_Shoulder_L", "Hit_Shoulder_R"};   /* R0 */
 
-static void mesh_setup(t3_object *o, void *ctx) {
-  (void)ctx;
-  if (o->type != T3_MESH && o->type != T3_SKINNED_MESH) return;
-  o->frustum_culled = false; o->cast_shadow = true; o->receive_shadow = true;
-  t3_mesh *m = (t3_mesh *)o;
-  for (int i = 0; i < m->material_count; i++) {
-    t3_material *D = m->materials[i];
-    if (!D) continue;
-    D->emissive_intensity = 0.1f; D->metalness = 0.05f; D->roughness = 0.82f;
-    if (D->map) D->map->anisotropy = 8;
-    D->version++;
-  }
-}
-
-fighter *fighter_new(const char *rig_key, const char *name, float scale, const char *glb, const char *rig_asset) {
+fighter *fighter_new(int ri) {
   fighter *f = calloc(1, sizeof *f);
-  f->rig_key = rig_key; f->name = name;
-  size_t n; uint8_t *b = ck_asset(glb, &n);
-  t3_gltf *g = t3_gltf_parse(b, n, NULL, NULL);
-  free(b);
-  f->root = t3_object_new();
-  f->model = g->scene;
-  t3_object_add(f->root, f->model);
-  t3_object_set_scale(f->model, scale, scale, scale);
-  f->rig = rig_load(rig_asset);
-  mixer_init(&f->mixer, f->rig, f->model);
-  t3_object_traverse(f->model, mesh_setup, NULL);
-  f->hand = t3_object_get_by_name(f->model, "RightHand");
-  f->foot = t3_object_get_by_name(f->model, "RightFoot");
-  f->toe = t3_object_get_by_name(f->model, "RightToeBase");
-  f->hips = t3_object_get_by_name(f->model, "Hips");
+  f->ri = ri; f->name = roster_get(ri)->name;
+  f->body = body_new(ri);
+  f->root = body_root(f->body);
+  f->mixer = body_mixer(f->body);
+  f->rig = body_rig(f->body);
+  f->hand = body_bone(f->body, BONE_RHAND);
+  f->foot = body_bone(f->body, BONE_RFOOT);
+  f->toe = body_bone(f->body, BONE_RTOE);
+  f->hips = body_bone(f->body, BONE_HIPS);
   f->weapon_key = -1;
   f->move = -1;
   fighter_reset(f);
   return f;
 }
 
-/* Quaternion.setFromUnitVectors */
-static t3_quat from_unit_vectors(t3_vec3 a, t3_vec3 b) {
-  t3_quat q; float r = a.x * b.x + a.y * b.y + a.z * b.z + 1;
-  if (r < 1e-8f) {
-    r = 0;
-    if (fabsf(a.x) > fabsf(a.z)) { q.x = -a.y; q.y = a.x; q.z = 0; q.w = r; }
-    else { q.x = 0; q.y = -a.z; q.z = a.y; q.w = r; }
-  } else {
-    q.x = a.y * b.z - a.z * b.y; q.y = a.z * b.x - a.x * b.z; q.z = a.x * b.y - a.y * b.x; q.w = r;
-  }
-  return t3_quat_normalize(q);
+void fighter_free(fighter *f) {
+  if (!f) return;
+  body_free(f->body);
+  free(f);
 }
 
 void fighter_set_weapon(fighter *f, int w) {
-  if (f->weapon_obj) { t3_object_remove(f->hand, f->weapon_obj); f->weapon_obj = NULL; }
+  if (w < 0 || w >= WEAPON_N) w = 0;
+  t3_object **slot[2] = {&f->weapon_obj, &f->weapon_obj2};
+  for (int h = 0; h < 2; h++) if (*slot[h]) { t3_object_remove(body_grip(f->body, h), *slot[h]); *slot[h] = NULL; }
   f->weapon_key = w;
   f->W = &WEAPONS[w];
-  t3_object *e = weapon_build(w), *t = t3_object_new();
-  t3_object_add(t, e); t3_release(e);
-  /* kl: the grip axis of each rig's hand */
-  t3_vec3 D = !strcmp(f->rig_key, "a") ? t3_v3(0.979f, 0.204f, 0) : t3_v3(0.986f, 0.11f, 0.129f);
-  float l = sqrtf(D.x * D.x + D.y * D.y + D.z * D.z); D.x /= l; D.y /= l; D.z /= l;
-  t3_object_set_quaternion(t, from_unit_vectors(t3_v3(0, 1, 0), D));
-  t3_object_set_position(t, 0, 0.045f, 0);
-  t3_object_add(f->hand, t); t3_release(t);
-  f->weapon_obj = t;
+  /* the prop in the grip's frame (the page's holder under the hand, turned along kl: body.c) */
+  for (int h = 0; h < f->W->hands && h < 2; h++) {
+    t3_object *g = body_grip(f->body, h);
+    if (!g) continue;
+    t3_object *e = weapon_build(w);
+    t3_object_add(g, e); t3_release(e);
+    *slot[h] = e;
+  }
 }
 
 void fighter_reset(fighter *f) {
@@ -196,7 +75,7 @@ void fighter_reset(fighter *f) {
   f->buf = 0; f->buf_t = 0; f->hit_done = false; f->chain = 0; f->combo = 0; f->combo_t = 0; f->stun = 0;
   f->vel = (v3){0, 0, 0}; f->dodge_cd = 0; f->block_hold = false; f->has_prev_seg = false; f->shown = false;
   f->sp_done = false; f->recovering = false; f->won = false; f->last_dmg = 0;
-  mixer_stop_all(&f->mixer);
+  mixer_stop_all(f->mixer);
   f->cur = NULL; f->paused = false;
   fighter_play(f, "Sword_Idle", 0, false, 1, 0, true);
 }
@@ -204,7 +83,7 @@ void fighter_reset(fighter *f) {
 static ck_action *act(fighter *f, const char *clip) {
   int i = rig_clip_index(f->rig, clip);
   if (i < 0) { ck_log("no clip %s", clip); i = 0; }
-  return mixer_action(&f->mixer, i);
+  return mixer_action(f->mixer, i);
 }
 
 ck_action *fighter_play(fighter *f, const char *clip, float P, bool once, float speed, float from, bool hold) {
@@ -215,9 +94,9 @@ ck_action *fighter_play(fighter *f, const char *clip, float P, bool once, float 
   g->loop = once ? LOOP_ONCE : LOOP_REPEAT;
   g->clamp_when_finished = hold; g->time_scale = speed; g->time = from;
   action_set_effective_weight(g, 1);
-  if (f->cur && f->cur != g) action_cross_fade_from(&f->mixer, g, f->cur, P);
-  else action_fade_in(&f->mixer, g, P);
-  action_play(&f->mixer, g);
+  if (f->cur && f->cur != g) action_cross_fade_from(f->mixer, g, f->cur, P);
+  else action_fade_in(f->mixer, g, P);
+  action_play(f->mixer, g);
   f->cur = g;
   return g;
 }
@@ -232,11 +111,11 @@ v3 fighter_hurt_pos(const fighter *f) {
 
 bool fighter_busy(const fighter *f) {
   int s = f->state;
-  return s == ST_ATTACK || s == ST_DODGE || s == ST_HIT || s == ST_DOWN || s == ST_DEAD || s == ST_WIN;
+  return s == ST_ATTACK || s == ST_DODGE || s == ST_HIT || s == ST_DOWN || s == ST_DEAD || s == ST_WIN || s == ST_SPECIAL;
 }
 bool fighter_can_act(const fighter *f) { return f->state == ST_IDLE || f->state == ST_MOVE || f->state == ST_BLOCK; }
 float fighter_clip_time(const fighter *f) { return f->cur ? f->cur->time : 0; }
-const char *fighter_clip_name(const fighter *f) { return f->cur ? action_name(&f->mixer, f->cur) : ""; }
+const char *fighter_clip_name(const fighter *f) { return f->cur ? action_name(f->mixer, f->cur) : ""; }
 bool fighter_vulnerable_attack(const fighter *f) {
   return f->state == ST_ATTACK && f->move >= 0 && f->cur && f->cur->time < MOVES[f->move].hit1 + 0.05f;
 }
@@ -288,7 +167,7 @@ hit_out fighter_take_hit(fighter *f, const hit_in *A) {
     f->vel = (v3){A->dir.x * A->kb * 0.55f, 0, A->dir.z * A->kb * 0.55f};
     f->play_count++;
     ck_action *i = act(f, "Sword_Block");
-    action_reset(i); i->time = 0.18f; i->time_scale = 3.2f; action_play(&f->mixer, i);
+    action_reset(i); i->time = 0.18f; i->time_scale = 3.2f; action_play(f->mixer, i);
     f->cur = i; f->state_t = 0.1f;
     return (hit_out){HIT_BLOCKED, g};
   }
@@ -326,7 +205,8 @@ void fighter_on_land(fighter *f, int mv) {
 }
 void fighter_victory(fighter *f) {
   f->state = ST_WIN; f->state_t = 0; f->won = true; f->vel = (v3){0, 0, 0};
-  fighter_play(f, "Celebration", 0.2f, false, 1, 0, true);
+  const char *wc = roster_get(f->ri)->win_clip;
+  fighter_play(f, wc && rig_clip_index(f->rig, wc) >= 0 ? wc : "Celebration", 0.2f, false, 1, 0, true);
 }
 void fighter_intro(fighter *f) { f->state = ST_IDLE; fighter_play(f, "Sword_Idle", 0.1f, false, 1, 0, true); }
 
@@ -364,7 +244,12 @@ void fighter_update(fighter *f, float A, const intent_t *P, v2 e, fighter *t, co
     case ST_IDLE: case ST_MOVE: case ST_BLOCK: {
       if (!i) { move_anim(f, 0, 0, e); break; }
       int o = want(f, P);
-      if (o == 'S') fighter_start_move(f, MV_SPECIAL);
+      if (o == 'S' && special_is_cinematic(f->W->special)) {
+        /* KEYHOLDER's EXTREME: the meter pays now, special.c takes the fighter from here */
+        f->state = ST_SPECIAL; f->state_t = 0; f->meter = 0; f->move = -1; f->buf = 0; f->block_hold = false;
+        f->special_req = true;
+      }
+      else if (o == 'S') fighter_start_move(f, MV_SPECIAL);
       else if (o == 'H') fighter_start_move(f, MV_H1);
       else if (o == 'L') fighter_start_move(f, MV_L1);
       else if (o == 'K') fighter_start_move(f, MV_KICK);
@@ -436,7 +321,7 @@ void fighter_update(fighter *f, float A, const intent_t *P, v2 e, fighter *t, co
   float r = f->state == ST_ATTACK ? 7 : (f->state == ST_HIT || f->state == ST_DEAD) ? 4.5f : f->state == ST_DODGE ? 2.5f : 12;
   float v = expf(-r * A);
   f->vel.x *= v; f->vel.z *= v;
-  if (f->state != ST_DEAD && f->state != ST_HIT && f->state != ST_DODGE && f->state != ST_WIN && t) {
+  if (f->state != ST_DEAD && f->state != ST_HIT && f->state != ST_DODGE && f->state != ST_WIN && f->state != ST_SPECIAL && t) {
     v3 *tp = fighter_pos(t);
     float o = tp->x - pos->x, B = tp->z - pos->z;
     if (o * o + B * B > 0.01f) {
@@ -445,8 +330,7 @@ void fighter_update(fighter *f, float A, const intent_t *P, v2 e, fighter *t, co
     }
   }
   t3_object_set_rotation(f->root, 0, f->yaw, 0);
-  mixer_update(&f->mixer, A);
-  t3_object_update_matrix_world(f->root, true);
+  body_animate(f->body, A);
 }
 
 static v3 world_of(t3_object *o) { t3_vec3 p = t3_object_get_world_position(o); return (v3){p.x, p.y, p.z}; }
@@ -467,7 +351,7 @@ float fighter_weapon_segment(fighter *f, v3 *A, v3 *P) {
   }
   t3_object *e = f->weapon_obj;
   t3_object_update_world_matrix(e, true, false);
-  *A = apply_mw(e, 0, -0.05f, 0);
+  *A = apply_mw(e, 0, f->W->seg0, 0);
   *P = apply_mw(e, 0, f->W->len, 0);
   return f->W->r * 0.8f;
 }

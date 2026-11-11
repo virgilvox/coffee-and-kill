@@ -35,7 +35,8 @@ unsigned fx_texture(const uint8_t *rgba, int w, int h, bool repeat, bool mip);
 void fx_hex_linear(uint32_t hex, float out[3]);   /* Color.setHex: sRGB hex to linear */
 void fx_hex_raw(uint32_t hex, float out[3]);      /* the hex as 0..1 values, no conversion */
 
-/* once a frame, before any draw: the camera, the viewport height and the fog */
+/* once a frame, before any draw: the camera, the viewport height and the fog (density 0: none);
+ * exposure 0: the stage renders without tone mapping, so the effects skip it too */
 void fx_frame(t3_camera *cam, float fog_density, uint32_t fog_hex, float exposure);
 void fx_begin(void);
 void fx_end(void);

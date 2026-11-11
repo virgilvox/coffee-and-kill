@@ -46,8 +46,12 @@ fail=0; for p in "${pids[@]+"${pids[@]}"}"; do wait "$p" || fail=1; done
 if [ "${REGEN_STATES:-0}" = 1 ] || [ ! -f "$ROOT/src/gen/ck_gl.c" ]; then
   touch "$ROOT/tools/states.txt"
   miss=(); [ -s "$OUT/missing.txt" ] && miss=(--missing "$OUT/missing.txt")
-  (cd "$ROOT" && node "$THREE/tools/gen-project-table.mjs" --name ck --out src/gen --states tools/states.txt \
-     --cache build/t3-captures "${miss[@]+"${miss[@]}"}")
+  gen() { (cd "$ROOT" && node "$THREE/tools/gen-project-table.mjs" --name ck --out src/gen --states tools/states.txt \
+     --cache build/t3-captures "$@"); }
+  gen "${miss[@]+"${miss[@]}"}"      # captures anything new from three.js
+  # KEYHOLDER's bodies are cel lit: their lambert+skin programs get two bands (tools/cel-patch.mjs)
+  node "$ROOT/tools/cel-patch.mjs" "$ROOT/build/t3-captures"
+  gen                                # emits the table with the patched text
 fi
 
 GAMEF="-DWC_USE_GL -DWC_USE_NET_PEER ${EXTRA_CFLAGS:-}"
@@ -65,7 +69,7 @@ cxx "${MUSIC_CPP:-$ROOT/src/music.cpp}" "$GOBJ/music.o" -DBELLOWS_FAST_MATH=1 -I
 
 emcc $OPT -std=gnu11 -Wall -Wshadow -Wno-unused-function -ffp-contract=off -DT3_WASMCART $GAMEF \
   -I "$WASMCART/include" -I "$THREE/include" -I "$THREE/src" -I "$ROOT/src" -I "$ROOT/third_party" \
-  ${CK_SRCS:-"$ROOT"/src/*.c} "$ROOT/src/gen/ck_gl.c" "$GOBJ/cv.o" "$GOBJ/music.o" "$TOBJ"/*.o \
+  ${CK_SRCS:-"$ROOT"/src/*.c "$ROOT"/src/kh/*.c} "$ROOT/src/gen/ck_gl.c" "$GOBJ/cv.o" "$GOBJ/music.o" "$TOBJ"/*.o \
   -sSTANDALONE_WASM=1 -sEXPORTED_FUNCTIONS='["_wc_init","_wc_render","_wc_get_info","_wc_set_seed","_malloc","_free"]' \
   -sERROR_ON_UNDEFINED_SYMBOLS=0 -sINITIAL_MEMORY=134217728 -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=1048576 \
   --no-entry -o "$OUT/$NAME.wasm"
@@ -77,6 +81,8 @@ rm -rf "$OUT/assets" && mkdir -p "$OUT/assets"
 cp "$ROOT"/assets/fonts/*.ttf "$OUT/assets/"
 cp "$ROOT"/assets/anim/*.bin "$OUT/assets/"
 for m in $(cat "$ROOT/tools/models.txt"); do cp "$ROOT/assets/models/$m.glb" "$OUT/assets/"; done
+# KEYHOLDER's bodies, stages and signs (tools/import-kh.mjs)
+cp "$ROOT"/assets/kh/* "$OUT/assets/"
 # the music and SFX, rendered from the page's own audio code (tools/audio_rebuild.sh)
 cp "$ROOT"/assets/music/* "$OUT/assets/"
 
