@@ -9,7 +9,7 @@
  *      effects test against it
  *   3. fx.c: the page's ShaderMaterial effects (sparks, trails, rings, bursts,
  *      dust, light cones), blended on encoded values as WebGL blends them
- *   4. overlays: vignette, grain, HUD, screens, flash, dance (overlay.c)
+ *   4. overlays: vignette, HUD, screens, flash, dance (overlay.c); no film grain
  *   5. blit to the cart's framebuffer */
 #include "wasmcart.h"
 #include "wc_gl.h"

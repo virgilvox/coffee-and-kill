@@ -23,10 +23,8 @@ static void on_weapon(int s, const char *w) { snprintf(sel.slots[s].weapon, size
 static void on_swap(void) { char t[8]; strcpy(t, sel.slots[0].ch); strcpy(sel.slots[0].ch, sel.slots[1].ch); strcpy(sel.slots[1].ch, t); }
 static void on_diff(int l) { sel.level = l; }
 
-extern bool ui_test_no_grain;
 void game_init(void) {
   ui_init();
-  ui_test_no_grain = true;
   ui_cb.act = on_act; ui_cb.weapon = on_weapon; ui_cb.swap = on_swap; ui_cb.diff = on_diff;
   ui_show("s-load");
   ui_load(0.42f, "building the hackerspace");

@@ -25,7 +25,6 @@ void (*ui_on_olweapon)(const char *w);
 void (*ui_on_challenge)(const char *peer_id);
 void (*ui_on_room_enter)(void);
 float ui_now;
-bool ui_test_no_grain;   /* the test driver's comparisons with the page (whose grain it hides) */
 
 /* ================================================================== text */
 
@@ -736,7 +735,6 @@ static void draw_hud(void) {
 void ui_draw(void) {
   ov_begin();
   ov_vignette();
-  if (!ui_test_no_grain) ov_grain(ui_now);
   if (H.on) draw_hud();
   scr_draw();
   /* #flash: opacity P -> 0 over e ms, ease-out */

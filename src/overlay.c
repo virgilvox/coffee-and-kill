@@ -15,7 +15,6 @@
 
 static GLuint prog, vao, vbo;
 static GLint u_m, u_size, u_tex, u_mode, u_col, u_alpha, u_bright, u_uv;
-static ov_tex *grain_tex;
 static uint8_t *upbuf; static size_t upcap;
 
 static const char *VS =
@@ -48,94 +47,6 @@ static GLuint sh(GLenum type, const char *src) {
   return s;
 }
 
-/* ---- the grain: SVG feTurbulence (type fractalNoise, baseFrequency .9,
- * numOctaves 2, stitchTiles, seed 0) through the page's feColorMatrix (white,
- * alpha * .9), 160 px, following the reference code of the filter spec ---- */
-#define BSize 0x100
-#define BM 0xff
-#define PerlinN 0x1000
-static int lat[BSize + BSize + 2];
-static double grad[4][BSize + BSize + 2][2];
-typedef struct { int w, h, wrapx, wrapy; } stitch_t;
-static long seed_rand(long s) { s = 16807 * (s % 127773) - 2836 * (s / 127773); if (s <= 0) s += 2147483647; return s; }
-static void turb_init(long seed) {
-  double s; int i, j, k;
-  if (seed <= 0) seed = -(seed % (2147483647 - 1)) + 1;
-  if (seed > 2147483647 - 1) seed = 2147483647 - 1;
-  for (k = 0; k < 4; k++) for (i = 0; i < BSize; i++) {
-    lat[i] = i;
-    for (j = 0; j < 2; j++) grad[k][i][j] = (double)(((seed = seed_rand(seed)) % (BSize + BSize)) - BSize) / BSize;
-    s = sqrt(grad[k][i][0] * grad[k][i][0] + grad[k][i][1] * grad[k][i][1]);
-    if (s > 0) { grad[k][i][0] /= s; grad[k][i][1] /= s; }
-  }
-  while (--i) { k = lat[i]; lat[i] = lat[j = (seed = seed_rand(seed)) % BSize]; lat[j] = k; }
-  for (i = 0; i < BSize + 2; i++) {
-    lat[BSize + i] = lat[i];
-    for (k = 0; k < 4; k++) for (j = 0; j < 2; j++) grad[k][BSize + i][j] = grad[k][i][j];
-  }
-}
-#define s_curve(t) ((t) * (t) * (3. - 2. * (t)))
-#define lerpd(t, a, b) ((a) + (t) * ((b) - (a)))
-static double noise2(int ch, double vx, double vy, stitch_t *st) {
-  int bx0, bx1, by0, by1, b00, b10, b01, b11; double rx0, rx1, ry0, ry1, *q, sx, sy, a, b, t, u, v; int i, j;
-  t = vx + PerlinN; bx0 = ((int)t) & BM; bx1 = (bx0 + 1) & BM; rx0 = t - (int)t; rx1 = rx0 - 1.0;
-  t = vy + PerlinN; by0 = ((int)t) & BM; by1 = (by0 + 1) & BM; ry0 = t - (int)t; ry1 = ry0 - 1.0;
-  if (st) {
-    if (bx0 >= st->wrapx) bx0 -= st->w;
-    if (bx1 >= st->wrapx) bx1 -= st->w;
-    if (by0 >= st->wrapy) by0 -= st->h;
-    if (by1 >= st->wrapy) by1 -= st->h;
-  }
-  bx0 &= BM; bx1 &= BM; by0 &= BM; by1 &= BM;
-  i = lat[bx0]; j = lat[bx1];
-  b00 = lat[i + by0]; b10 = lat[j + by0]; b01 = lat[i + by1]; b11 = lat[j + by1];
-  sx = s_curve(rx0); sy = s_curve(ry0);
-  q = grad[ch][b00]; u = rx0 * q[0] + ry0 * q[1];
-  q = grad[ch][b10]; v = rx1 * q[0] + ry0 * q[1];
-  a = lerpd(sx, u, v);
-  q = grad[ch][b01]; u = rx0 * q[0] + ry1 * q[1];
-  q = grad[ch][b11]; v = rx1 * q[0] + ry1 * q[1];
-  b = lerpd(sx, u, v);
-  return lerpd(sy, a, b);
-}
-static double turbulence(int ch, double px, double py, double bf, int oct, int tw, int th) {
-  stitch_t st, *pst = &st;
-  double fx = bf, fy = bf;
-  /* stitchTiles: adjust the frequencies so the tile repeats */
-  double lo = floor(tw * fx) / tw, hi = ceil(tw * fx) / tw;
-  fx = (fx / lo < hi / fx) ? lo : hi;
-  lo = floor(th * fy) / th; hi = ceil(th * fy) / th;
-  fy = (fy / lo < hi / fy) ? lo : hi;
-  st.w = (int)(tw * fx + 0.5); st.wrapx = (int)(0 * fx + PerlinN + st.w);
-  st.h = (int)(th * fy + 0.5); st.wrapy = (int)(0 * fy + PerlinN + st.h);
-  double sum = 0, ratio = 1, vx = px * fx, vy = py * fy;
-  for (int n = 0; n < oct; n++) {
-    sum += noise2(ch, vx, vy, pst) / ratio;
-    vx *= 2; vy *= 2; ratio *= 2;
-    st.w *= 2; st.wrapx = 2 * st.wrapx - PerlinN; st.h *= 2; st.wrapy = 2 * st.wrapy - PerlinN;
-  }
-  return sum;
-}
-static void make_grain(void) {
-  int n = 160;
-  uint8_t *px = malloc((size_t)n * n * 4);
-  turb_init(0);
-  for (int y = 0; y < n; y++) for (int x = 0; x < n; x++) {
-    double a = (turbulence(3, x + 0.5, y + 0.5, 0.9, 2, n, n) + 1) / 2;   /* fractalNoise: (sum + 1) / 2 */
-    a = a < 0 ? 0 : a > 1 ? 1 : a;
-    a *= 0.9;                                                           /* feColorMatrix alpha row */
-    uint8_t A = (uint8_t)(a * 255 + 0.5);
-    uint8_t *p = px + ((size_t)y * n + x) * 4;
-    p[0] = p[1] = p[2] = A; p[3] = A;   /* white, premultiplied */
-  }
-  grain_tex = ov_tex_new(n, n);
-  glBindTexture(GL_TEXTURE_2D, grain_tex->id);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, n, n, 0, GL_RGBA, GL_UNSIGNED_BYTE, px);
-  free(px);
-}
-
 void ov_init(void) {
   prog = glCreateProgram();
   glAttachShader(prog, sh(GL_VERTEX_SHADER, VS));
@@ -151,7 +62,6 @@ void ov_init(void) {
   glBufferData(GL_ARRAY_BUFFER, sizeof q, q, GL_STATIC_DRAW);
   glEnableVertexAttribArray(0); glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
   glBindVertexArray(0);
-  make_grain();
 }
 
 ov_tex *ov_tex_new(int w, int h) {
@@ -243,27 +153,6 @@ void ov_fill(float x, float y, float w, float h, uint32_t rgb, float a) {
 void ov_vignette(void) {
   glUniform1i(u_mode, 2);
   glUniform2f(u_size, CK_W, CK_H);
-  float m[6] = {1, 0, 0, 1, 0, 0};
-  set_m(m);
-  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-}
-
-/* #grain: inset -50%, 200% of the viewport, opacity .07, a 160 px tile, moved by
- * @keyframes grain over 1.2 s with steps(6) per keyframe interval */
-void ov_grain(double t) {
-  static const float kx[6] = {0, -3, 2, -2, 3, 0}, ky[6] = {0, 2, -3, -1, 3, 0};
-  double ph = fmod(t, 1.2) / 1.2 * 5.0;           /* five intervals */
-  int seg = (int)ph; if (seg > 4) seg = 4;
-  double local = ph - seg;
-  double k = floor(local * 6) / 6;                 /* steps(6), jump-end */
-  float tx = (float)(kx[seg] + (kx[seg + 1] - kx[seg]) * k) / 100.f * (CK_W * 2);
-  float ty = (float)(ky[seg] + (ky[seg + 1] - ky[seg]) * k) / 100.f * (CK_H * 2);
-  /* the element's top left sits at (-640, -360) plus the translate; the tile repeats from there */
-  float ox = -CK_W / 2.f + tx, oy = -CK_H / 2.f + ty;
-  glBindTexture(GL_TEXTURE_2D, grain_tex->id);
-  glUniform1i(u_mode, 0); glUniform1f(u_alpha, 0.07f); glUniform1f(u_bright, 1);
-  glUniform2f(u_size, CK_W, CK_H);
-  glUniform4f(u_uv, -ox / 160.f, -oy / 160.f, CK_W / 160.f, CK_H / 160.f);
   float m[6] = {1, 0, 0, 1, 0, 0};
   set_m(m);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
