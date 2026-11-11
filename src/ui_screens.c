@@ -267,9 +267,18 @@ static char end_name[40] = "MOHEEB"; static bool end_wins = true; static char en
 static void end_layout(void) {
   /* .center-card 520 wide, padding 18 22, centred; .big marker 86 lh .95; .sub 16 ls .18em margin-top 10; menu margin-top 16 */
   char words[48]; snprintf(words, sizeof words, "%s%s", end_name, end_wins ? " WINS" : "");
+  /* the page's 86 px, smaller when one word is wider than the card (HOLLOWAY) */
+  float fs = 86;
+  for (const char *p = words; *p; ) {
+    char wd[48]; int n = 0;
+    while (p[n] && p[n] != ' ' && n < 47) { wd[n] = p[n]; n++; }
+    wd[n] = 0; p += n; while (*p == ' ') p++;
+    float ww = t_width(F_MARKER, 86, 0, wd);
+    if (ww > 468) fs = fminf(fs, floorf(86 * 468 / ww));
+  }
   char lines[4][160];
-  int nl = t_wrap(F_MARKER, 86, 0, words, 468, false, lines, 4);
-  float lh = 86 * 0.95f;
+  int nl = t_wrap(F_MARKER, fs, 0, words, 468, false, lines, 4);
+  float lh = fs * 0.95f;
   float H = 4 + 18 + nl * lh + 10 + t_line(F_TYPE, 16) + 16 + 3 * 57 + 2 * 16 + 18 + 4;
   float top = 360 - H / 2, x = 380;
   R_begin(&end_R, 376, (int)floorf(top) - 4, 534, (int)ceilf(H) + 16);
@@ -279,18 +288,18 @@ static void end_layout(void) {
   name_words++;
   int wi = 0;   /* colour per word: the name ink, <em>WINS</em> pink */
   for (int k = 0; k < nl; k++) {
-    float w = t_width(F_MARKER, 86, 0, lines[k]);
-    float lx = x + 26 + (468 - w) / 2, base = t_base(F_MARKER, 86, top + 22 + k * lh, lh);
+    float w = t_width(F_MARKER, fs, 0, lines[k]);
+    float lx = x + 26 + (468 - w) / 2, base = t_base(F_MARKER, fs, top + 22 + k * lh, lh);
     char *s = lines[k];
     while (*s) {
       char word[64]; int n = 0;
       while (s[n] && s[n] != ' ') n++;
       memcpy(word, s, n); word[n] = 0;
       col_t col = wi >= name_words ? COL(C_PINK) : COL(C_INK);
-      t_draw(c, F_MARKER, 86, 0, lx, base, word, col);
-      lx += t_width(F_MARKER, 86, 0, word);
+      t_draw(c, F_MARKER, fs, 0, lx, base, word, col);
+      lx += t_width(F_MARKER, fs, 0, word);
       s += n; wi++;
-      if (*s == ' ') { lx += t_width(F_MARKER, 86, 0, " "); s++; }
+      if (*s == ' ') { lx += t_width(F_MARKER, fs, 0, " "); s++; }
     }
   }
   float sy = top + 22 + nl * lh + 10;
