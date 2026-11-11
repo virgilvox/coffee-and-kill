@@ -91,7 +91,7 @@ cp "$ROOT"/assets/music/* "$OUT/assets/"
 
 # manifest: the CLASP relay is the only host the cart may dial (online versus and phone pads)
 node "$WASMCART/bin/wasmcart-pack.js" --wasm "$OUT/$NAME.wasm" --assets "$OUT/assets" \
-  --name "COFFEE & KILL" --version 0.2.0 --width 1280 --height 720 --players 2 \
+  --name "COFFEE & KILL" --version 0.2.1 --width 1280 --height 720 --players 2 \
   --controls dpad,left_stick,a,b,x,y,l,r,left_trigger,right_trigger,start,select \
   --ws relay.clasp.to --output "$OUT/$NAME.wasc" >/dev/null
 echo "built $OUT/$NAME.wasc ($(wc -c < "$OUT/$NAME.wasc" | tr -d ' ') bytes)"

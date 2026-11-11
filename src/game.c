@@ -971,7 +971,7 @@ static mp_val *snapshot(void) {
 static void host_tick(float A) {
   G.snap_timer += A;
   if (G.snap_timer >= 0.04) { G.snap_timer = 0; online_snap(snapshot()); }
-  if (online_idle_ms() > (G.idle_ms ? G.idle_ms : 1e4)) game_leave_online("OPPONENT LEFT");
+  if (online_idle_ms() > (G.idle_ms ? G.idle_ms : 5e3)) game_leave_online("OPPONENT LEFT");
 }
 
 void game_on_intent(const mp_val *A) {
@@ -1061,7 +1061,7 @@ static void step_guest(float A) {
     mp_set(m, "c", c);
     online_intent(m);
   }
-  if (online_in_match() && online_idle_ms() > (G.idle_ms ? G.idle_ms : 1e4)) { game_leave_online("HOST LEFT"); return; }
+  if (online_in_match() && online_idle_ms() > (G.idle_ms ? G.idle_ms : 5e3)) { game_leave_online("HOST LEFT"); return; }
   if (!P) return;
   int ph = ph_index(mp_gets(P, "ph", "menu"));
   if (ph != G.phase) {
@@ -1516,6 +1516,9 @@ bool game_boot(int stage) {
   G.paused = false; menu_mode(); ui_hud(false); ui_show("s-title");
 #ifdef CK_AUTOSTART   /* test builds: straight into a one player fight (CK_AUTOSTART=2: two players) */
   act(CK_AUTOSTART == 2 ? "2p" : "1p"); act("start");
+#endif
+#ifdef CK_SELECT   /* test builds: stop on the character select, to look at the standing fighters */
+  act("1p");
 #endif
 #ifdef CK_ONLINE_TEST /* test builds: join a private room as CARTTEST */
   snprintf(ui_online.name, sizeof ui_online.name, "CARTTEST"); snprintf(ui_online.room, sizeof ui_online.room, CK_ONLINE_TEST);

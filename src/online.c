@@ -53,7 +53,7 @@ static void upper_clean(char *dst, const char *src, int max, bool room) {
 }
 
 /* ---- Cv: the lobby ---- */
-typedef struct { char id[16], n[16], w[12], c[12]; int v; double q; int s; double seen, first; } peer;
+typedef struct { char id[16], n[16], w[12], c[12]; int v; double q; int s; double seen, first; bool away; } peer;
 /* what a side brings: the page's "w", and a cart's "x" */
 typedef struct { int v; char c[12], w[12], g[12]; } ext_t;
 static struct {
@@ -131,7 +131,7 @@ static void on_presence(const mp_val *A, const char *addr, void *ctx) {
     snprintf(t->id, 16, "%s", e); snprintf(t->n, 16, "%s", mp_gets(A, "n", "?")); snprintf(t->w, 12, "%s", mp_gets(A, "w", ""));
     ext_t x = ext_read(A); t->v = x.v; snprintf(t->c, sizeof t->c, "%s", x.v ? x.c : "");
     if (x.v) snprintf(t->w, 12, "%s", x.w);
-    t->q = q; t->s = (int)mp_getn(A, "s", 0); t->seen = D; t->first = first;
+    t->q = q; t->s = (int)mp_getn(A, "s", 0); t->seen = D; t->first = first; t->away = false;
     fire_peers();
   }
 }
@@ -339,6 +339,7 @@ static void fire_peers(void) {
     snprintf(ui_online.peers[i].id, 16, "%s", L.peers[i].id); snprintf(ui_online.peers[i].n, 16, "%s", L.peers[i].n);
     snprintf(ui_online.peers[i].w, 12, "%s", L.peers[i].w); ui_online.peers[i].busy = L.peers[i].s != 0;
     snprintf(ui_online.peers[i].c, 12, "%s", L.peers[i].c); ui_online.peers[i].v = L.peers[i].v;
+    ui_online.peers[i].away = L.peers[i].away;
   }
 }
 
@@ -463,7 +464,13 @@ void online_update(float dt) {
     if (L.hb >= 1.5) {
       L.hb = 0; beat();
       double A = now_ms(); bool P = false;
-      for (int i = 0; i < L.npeers; i++) if (A - L.peers[i].seen > 1e4) { L.peers[i--] = L.peers[--L.npeers]; P = true; }
+      /* a presence beat is every 1.5 s: after about two missed beats a peer is "away" (signal lost),
+       * after about three they are dropped from the list. The page just waited ten seconds. */
+      for (int i = 0; i < L.npeers; i++) {
+        double gap = A - L.peers[i].seen;
+        if (gap > 5500) { L.peers[i--] = L.peers[--L.npeers]; P = true; }
+        else { bool aw = gap > 3300; if (aw != L.peers[i].away) { L.peers[i].away = aw; P = true; } }
+      }
       if (P) fire_peers();
     }
   }

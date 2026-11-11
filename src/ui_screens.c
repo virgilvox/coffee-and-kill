@@ -493,20 +493,22 @@ static void online_paint(void) {
     float h = o->peers[i].busy ? 46 : 56;
     c_box(c, cx, py, 628, h, COL(C_PAPER), 3, COL(C_INK), 0, 0, COL(0));
     float mid = py + h / 2;
-    t_draw(c, F_MARKER, 22, 0, cx + 15, mid - 12 + t_asc(F_MARKER, 22), o->peers[i].n, COL(C_INK));
+    bool away = o->peers[i].away;
+    t_draw(c, F_MARKER, 22, 0, cx + 15, mid - 12 + t_asc(F_MARKER, 22), o->peers[i].n, COLA(C_INK, away ? 0.4f : 1));
     char wp[64]; int wk = weapon_index(o->peers[i].w), fk = roster_index(o->peers[i].c);
     const char *wn = wk >= 0 ? WEAPONS[wk].name : "?";
-    if (fk >= 0) snprintf(wp, sizeof wp, "%s, %s%s", ROSTER[fk].name, wn, o->peers[i].busy ? " IN A FIGHT" : "");
+    if (away) snprintf(wp, sizeof wp, "SIGNAL LOST, RECONNECTING");
+    else if (fk >= 0) snprintf(wp, sizeof wp, "%s, %s%s", ROSTER[fk].name, wn, o->peers[i].busy ? " IN A FIGHT" : "");
     else snprintf(wp, sizeof wp, "%s%s", wn, o->peers[i].busy ? " IN A FIGHT" : "");
     float pw = t_width(F_TYPE, 14, 0.7f, wp);
     float right = cx + 628 - 15;
-    if (!o->peers[i].busy) {
+    if (!o->peers[i].busy && !away) {
       float wc = chip_w("CHALLENGE");
       chip_paint(c, right - wc, mid - 17, "CHALLENGE", true);
       ol_ctl[nol_ctl++] = (hit_t){right - wc, mid - 17, wc, 34, H_CH, i, 0, ""};
       right -= wc + 10;
     }
-    t_draw(c, F_TYPE, 14, 0.7f, right - pw, mid - 8.5f + t_asc(F_TYPE, 14), wp, COLA(C_INK, 0.75f));
+    t_draw(c, F_TYPE, 14, 0.7f, right - pw, mid - 8.5f + t_asc(F_TYPE, 14), wp, COLA(C_INK, away ? 0.55f : 0.75f));
     py += h + 8;
   }
   /* the challenge banner */

@@ -1117,6 +1117,14 @@ static void build_lights(void) {
   t3_camera_update_projection_matrix(DA);
   sun->shadow->bias = -4e-4f; sun->shadow->normal_bias = 0.03f;
   add(S, sun); add(S, sun->target); t3_release(sun);
+  /* a soft fill from in front of the camera and low, so the cel faces are lit during the fight too
+   * (the sun is up on the left for the stage and its shadows; on its own it leaves the faces half dark,
+   * the same reason the menu swings the sun forward). No shadow, so the stage keeps the sun's. */
+  t3_light *face = t3_directional_light_new(16773350, 1.15f);
+  t3_object_set_position(face, 0, 2.6f, 12);
+  t3_object_set_position(face->target, 0, 1.0f, 0);
+  face->base.cast_shadow = false;
+  add(S, face); add(S, face->target); t3_release(face);
   warm[0] = point_light(S, 16767392, 150, 18, 2, -3.2f, MP - 3.1f, 0);
   warm[1] = point_light(S, 16767392, 150, 18, 2, 3.2f, MP - 3.1f, 0);
   point_light(S, 12735532, 150, 15, 2, -6.2f, 3.2f, -2.2f);

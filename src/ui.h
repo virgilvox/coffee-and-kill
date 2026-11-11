@@ -94,7 +94,7 @@ typedef struct {
   char weapon[12];                 /* the weapon chips, the one that is on */
   char fighter[12], stage[12];     /* this cart's picks (cart against cart only) */
   int npeers;
-  struct { char id[16], n[16], w[12], c[12]; int v; bool busy; } peers[16];   /* c, v: a cart's fighter and wire version */
+  struct { char id[16], n[16], w[12], c[12]; int v; bool busy, away; } peers[16];   /* c, v: a cart's fighter and wire version */
   bool challenge; char chtxt[48];  /* #ol-ch */
   int focus;                       /* 0 none, 1 name, 2 room */
 } ui_online_t;

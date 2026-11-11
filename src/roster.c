@@ -20,7 +20,7 @@
                          {NONE, DYE(40, 0.6f, 1), DYE(32, 0.4f, 1.4f), NONE}}
 
 const roster_entry ROSTER[] = {
-  { "moheeb", "MOHEEB", "THE BARISTA", "Pulls a shot, pulls a wrench. Same wrist.", 0xf2ab1e, "pipe", NULL, true,
+  { "moheeb", "MOHEEB", "DO-OCRAT", "Sees the thing that needs doing, does it. Then documents it.", 0xf2ab1e, "pipe", NULL, true,
     PAGE("char_b.glb", "rig_b.bin", 0.97f, 0.986f, 0.11f, 0.129f),
     .alts = {{SW(222, 0.6f, 1.6f), SW(212, 0.45f, 0.95f)}, {SW(20, 0.55f, 1.6f), SW(38, 0.32f, 1)}, {SW(0, 0, 0.9f), SW(39, 0.72f, 1)}} },
   { "luis", "LUIS", "THE FABRICATOR", "Measures twice. Swings once. Hard.", 0x5e93c4, "sledge", NULL, true,
