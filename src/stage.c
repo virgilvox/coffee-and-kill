@@ -9,17 +9,25 @@
 #include <string.h>
 #include <math.h>
 
-/*  key        name                        blurb                                                  kind          web   ring   kh stage             place        lab x, z     yaw   hour */
+#define WORKSHOP(...) .kind = STK_WORKSHOP, .web = true, .ring = 4.45f, __VA_ARGS__
+#define ARENA(st) .kind = STK_KH_ARENA, .ring = 4.45f, .kh_stage = st
+#define TOWN(pl, hr) .kind = STK_KH_TOWN, .ring = 4.45f, .place = pl, .hour = hr
 const stage_def STAGES[] = {
-  {"workshop", "THE WORKSHOP", "Robot arms, cogs and an Arduino Mega the size of a wall.", STK_WORKSHOP, true, 4.45f, 0, NULL, 0, 0, 0, 0},
-  {"lab", "THE LAB", "HSL-108 on a weekday afternoon. Mind the couches.", STK_KH_LAB, false, 2.6f, 0, NULL, 15.6f, 4.8f, 1.5708f, 15.5f},
-  {"main", "MAIN STREET", "West Main in front of the lab, the light rail going by.", STK_KH_TOWN, false, 4.45f, 0, "mid_block", 0, 0, 0, 12.5f},
-  {"lot", "THE BACK LOT", "Behind the lab. Plenty of daylight, plenty of gravel.", STK_KH_TOWN, false, 4.45f, 0, "lot_fight", 0, 0, 0, 17.6f},
-  {"bench", "THE LONG BENCH", "The lab's hall opened out, benches around a wide floor.", STK_KH_ARENA, false, 4.45f, STAGE_ARENA_BENCH, NULL, 0, 0, 0, 0},
-  {"laser", "LASER CORNER", "A ring under an oversized laser gantry.", STK_KH_ARENA, false, 4.45f, STAGE_ARENA_LASER, NULL, 0, 0, 0, 0},
-  {"fridge", "THE FRIDGE", "The kitchen, grown, tiled and frosted.", STK_KH_ARENA, false, 4.45f, STAGE_ARENA_FRIDGE, NULL, 0, 0, 0, 0},
-  {"shop", "MACHINE SHOP", "Lathes and mills as pillars around a steel floor.", STK_KH_ARENA, false, 4.45f, STAGE_ARENA_SHOP, NULL, 0, 0, 0, 0},
-  {"unfold", "THE WHOLE LAB, UNFOLDED", "Every room of the lab around a huge disc, night sky.", STK_KH_ARENA, false, 4.45f, STAGE_ARENA_UNFOLD, NULL, 0, 0, 0, 0},
+  {"workshop", "THE WORKSHOP", "Robot arms, cogs and an Arduino Mega the size of a wall.", WORKSHOP(.cam_clear = 0)},
+  /* the lab is narrow and full: the fight runs down the open floor by the electronics bench, the
+   * ring is an ellipse that keeps off the tables, and the lens sits up over them */
+#ifdef CK_TEST_LABX
+  {"lab", "THE LAB", "test", .kind = STK_KH_LAB, .ring = 3.2f, .ring_z = 0.9f, .lab_x = CK_TEST_LABX, .lab_z = 4.7f, .yaw = -1.5708f, .hour = 15.5f, .cam_lift = 0.75f, .cam_max = 4.6f, .cam_clear = 1, .cam_side = true},
+#else
+  {"lab", "THE LAB", "HSL-108 on a weekday afternoon, down the open floor by the electronics bench.", .kind = STK_KH_LAB, .ring = 3.2f, .ring_z = 0.9f, .lab_x = 25, .lab_z = 4.7f, .yaw = -1.5708f, .hour = 15.5f, .cam_lift = 0.75f, .cam_max = 4.6f, .cam_clear = 1, .cam_side = true},
+#endif
+  {"main", "MAIN STREET", "West Main in front of the lab, the light rail going by.", TOWN("mid_block", 12.5f), .cam_clear = 2},
+  {"lot", "THE BACK LOT", "Behind the lab. Plenty of daylight, plenty of gravel.", TOWN("lot_fight", 17.6f), .cam_clear = 2},
+  {"bench", "THE LONG BENCH", "The lab's hall opened out, benches around a wide floor.", ARENA(STAGE_ARENA_BENCH)},
+  {"laser", "LASER CORNER", "A ring under an oversized laser gantry.", ARENA(STAGE_ARENA_LASER)},
+  {"fridge", "THE FRIDGE", "The kitchen, grown, tiled and frosted.", ARENA(STAGE_ARENA_FRIDGE)},
+  {"shop", "MACHINE SHOP", "Lathes and mills as pillars around a steel floor.", ARENA(STAGE_ARENA_SHOP)},
+  {"unfold", "THE WHOLE LAB, UNFOLDED", "Every room of the lab around a huge disc, night sky.", ARENA(STAGE_ARENA_UNFOLD)},
 };
 const int STAGE_N = (int)(sizeof STAGES / sizeof STAGES[0]);
 int stage_index(const char *k) { for (int i = 0; k && i < STAGE_N; i++) if (!strcmp(STAGES[i].key, k)) return i; return -1; }
@@ -42,6 +50,12 @@ void stage_init(t3_renderer *r) {
 int stage_current(void) { return cur; }
 t3_scene *stage_scene(void) { return cur >= 0 && STAGES[cur].kind != STK_WORKSHOP ? kh_scene : ws_scene; }
 float stage_ring(void) { return cur >= 0 ? STAGES[cur].ring : 4.45f; }
+float stage_ring_z(void) { return cur >= 0 && STAGES[cur].ring_z > 0 ? STAGES[cur].ring_z : stage_ring(); }
+void stage_camera_rules(float *lift, float *max_dist, bool *one_side) {
+  *lift = cur >= 0 ? STAGES[cur].cam_lift : 0;
+  *one_side = cur >= 0 && STAGES[cur].cam_side;
+  *max_dist = cur >= 0 && STAGES[cur].cam_max > 0 ? STAGES[cur].cam_max : 99;
+}
 bool stage_shadows(void) { return cur < 0 || STAGES[cur].kind == STK_WORKSHOP; }
 bool stage_needs_load(int s) { return s >= 0 && s < STAGE_N && (STAGES[s].kind == STK_WORKSHOP ? !ws_ready : !kh_ready); }
 
@@ -140,12 +154,12 @@ void stage_camera(v3 look_at, v3 *pos) {
     pos->x = ck_clamp(pos->x, -ROOM_HX + 1, ROOM_HX - 1); pos->z = ck_clamp(pos->z, -ROOM_HZ + 1, ROOM_HZ - 1);
     return;
   }
-  if (d->kind == STK_KH_ARENA) return;
-  /* the town and the lab: pull the lens in front of whatever is between it and the fight */
+  if (!d->cam_clear) return;
+  /* pull the lens in front of the walls (1) or of anything (2) between it and the fight */
   v3 a = kh_world(look_at), b = kh_world(*pos);
   float full = v3_len(v3_sub(b, a));
   if (full < 1e-3f) return;
-  float k = world_cam_clear_all(a, b, 0.22f) / full;
+  float k = (d->cam_clear == 1 ? world_cam_clear(a, b, 0.22f) : world_cam_clear_all(a, b, 0.22f)) / full;
   if (k < 1) {
     k = fmaxf(k, 0.35f);
     pos->x = look_at.x + (pos->x - look_at.x) * k;

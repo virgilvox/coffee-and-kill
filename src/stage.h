@@ -25,12 +25,17 @@ typedef struct {
   const char *key, *name, *blurb;
   int kind;              /* STK_* */
   bool web;              /* the web version's own arena: the only one online against the web page */
-  float ring;            /* how far from the centre the fighters may go */
+  float ring;            /* how far from the centre the fighters may go (along the fighters' line) */
+  float ring_z;          /* across it, when the ring is an ellipse (0: a circle) */
   int kh_stage;          /* KEYHOLDER's world_stage for arenas */
   const char *place;     /* STK_KH_TOWN: a named place (world_place) */
   float lab_x, lab_z;    /* STK_KH_LAB: a point on the HSL-108 plan */
   float yaw;             /* the fighters' line, turned this much from the place's x axis */
   float hour;            /* the town's clock (lights, sky) */
+  /* the fight camera here: raised by cam_lift, no further than cam_max from the fight, and kept
+   * clear of 0 nothing, 1 the walls, 2 the walls and the furniture */
+  float cam_lift, cam_max; int cam_clear;
+  bool cam_side;         /* the camera stays on the +z side of the fighters' line (a narrow room) */
 } stage_def;
 
 extern const stage_def STAGES[];
@@ -45,6 +50,8 @@ bool stage_needs_load(int s);                 /* true when picking s would load 
 int stage_current(void);
 t3_scene *stage_scene(void);
 float stage_ring(void);
+float stage_ring_z(void);
+void stage_camera_rules(float *lift, float *max_dist, bool *one_side);
 
 /* per frame: the stage's animation, with the point the fight is about (the robot eye and the
  * town's culling follow it) */

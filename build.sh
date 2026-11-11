@@ -88,8 +88,13 @@ cp "$ROOT"/assets/music/* "$OUT/assets/"
 
 # manifest: the CLASP relay is the only host the cart may dial (online versus and phone pads)
 node "$WASMCART/bin/wasmcart-pack.js" --wasm "$OUT/$NAME.wasm" --assets "$OUT/assets" \
-  --name "COFFEE & KILL" --version 0.1.0 --width 1280 --height 720 --players 2 \
+  --name "COFFEE & KILL" --version 0.2.0 --width 1280 --height 720 --players 2 \
   --controls dpad,left_stick,a,b,x,y,l,r,left_trigger,right_trigger,start,select \
   --ws relay.clasp.to --output "$OUT/$NAME.wasc" >/dev/null
-if [ "$OUT" = "$ROOT/build" ]; then mkdir -p "$ROOT/web" && cp "$OUT/$NAME.wasc" "$ROOT/web/$NAME.wasc"; fi
 echo "built $OUT/$NAME.wasc ($(wc -c < "$OUT/$NAME.wasc" | tr -d ' ') bytes)"
+# the default tree also makes the web version: the cart and the one-file page (shell, the
+# wasmcart web host and the cart inlined: tools/inline-html.mjs)
+if [ "$OUT" = "$ROOT/build" ]; then
+  mkdir -p "$ROOT/web" && cp "$OUT/$NAME.wasc" "$ROOT/web/$NAME.wasc"
+  node "$ROOT/tools/inline-html.mjs" "$ROOT/web/index.src.html" "$ROOT/web/vendor/host-bundle.js" "$OUT/$NAME.wasc" "$ROOT/web/$NAME.html"
+fi

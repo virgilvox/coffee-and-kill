@@ -156,7 +156,8 @@ static void set_sides(bool cpu0, int lv0, const char *l0, bool cpu1, int lv1, co
 static void place_fighters(void) {
   fighter *A = G.f[0], *P = G.f[1];
   fighter_reset(A); fighter_reset(P);
-  t3_object_set_position(A->root, -AI_X, 0, 0); t3_object_set_position(P->root, AI_X, 0, 0);
+  float ax = fminf(AI_X, stage_ring() * 0.8f);
+  t3_object_set_position(A->root, -ax, 0, 0); t3_object_set_position(P->root, ax, 0, 0);
   A->yaw = CK_PI / 2; P->yaw = -CK_PI / 2;
   t3_object_set_rotation(A->root, 0, A->yaw, 0); t3_object_set_rotation(P->root, 0, P->yaw, 0);
   body_teleport(A->body); body_teleport(P->body);
@@ -492,16 +493,19 @@ static void separate(void) {
     float g = (w - D) / 2, i = e / D, n = t / D;
     a->x -= i * g; a->z -= n * g; p->x += i * g; p->z += n * g;
   }
-  const float DV = stage_ring();
+  /* the ring: a circle (the page's Dv), or an ellipse where the stage is narrow */
+  const float RX = stage_ring(), RZ = stage_ring_z();
   for (int k = 0; k < 2; k++) {
     fighter *g = G.f[k];
     v3 *q = fighter_pos(g);
-    float i = hypotf(q->x, q->z);
-    if (i > DV) {
-      float n = DV / i;
-      q->x *= n; q->z *= n;
-      float r = q->x / DV, v = q->z / DV, o = g->vel.x * r + g->vel.z * v;
-      if (o > 0) { g->vel.x -= r * o; g->vel.z -= v * o; }
+    float u = q->x / RX, v = q->z / RZ, i = sqrtf(u * u + v * v);
+    if (i > 1) {
+      q->x /= i; q->z /= i;
+      /* the outward normal of the ellipse there, and the velocity's part along it */
+      float nx = q->x / (RX * RX), nz = q->z / (RZ * RZ), nl = sqrtf(nx * nx + nz * nz);
+      if (nl > 0) { nx /= nl; nz /= nl; }
+      float o = g->vel.x * nx + g->vel.z * nz;
+      if (o > 0) { g->vel.x -= nx * o; g->vel.z -= nz * o; }
     }
   }
 }
@@ -595,11 +599,13 @@ static void update_camera(float A) {
     if (vl < 0.2f) { vx = 1; vy = 0; vl = 1; }
     vx /= vl; vy /= vl;
     float o = atan2f(vy, vx);
+    float lift, amax; bool one_side; stage_camera_rules(&lift, &amax, &one_side);
+    if (one_side && cosf(o) < 0) o = ck_wrap_pi(o + CK_PI);   /* a narrow room: always from the same side */
     if (G.cam_snap) G.cam_yaw = o;
     float B = ck_wrap_pi(o - G.cam_yaw);
     G.cam_yaw += B * fminf(1, A * 3.2f);
     float zx = cosf(G.cam_yaw), zy = sinf(G.cam_yaw);
-    float a = ck_clamp(3.9f + r * 0.78f, 4.8f, 8), c = 1.55f + r * 0.1f, Q = 1.05f;
+    float a = fminf(ck_clamp(3.9f + r * 0.78f, 4.8f, 8), amax), c = 1.55f + r * 0.1f + lift, Q = 1.05f;
     if (G.phase == PH_KO) {
       int kw = G.ko_winner >= 0 ? G.ko_winner : 0;
       fighter *u = G.f[1 - kw];
@@ -612,6 +618,9 @@ static void update_camera(float A) {
     w = (v3){n.x - zy * a, c, n.z + zx * a}; g = (v3){n.x, Q, n.z};
   }
   float fov = 40;
+#ifdef CK_TEST_TOP   /* test builds: straight down on the ring (picking a stage's spot) */
+  w = (v3){0, 2.8f, 0.01f}; g = (v3){0, 0, 0}; fov = 112; clip = false; G.cam_snap = true;
+#endif
   if (special_camera(&w, &g, &fov)) { G.cs.pos = w; G.cs.look = g; clip = true; }
   if (clip) stage_camera(g, &w);
   if (fabsf(fov - G.cam->fov) > 0.01f) { G.cam->fov = fov; t3_camera_update_projection_matrix(G.cam); }
@@ -1256,6 +1265,8 @@ void game_draw(void) {
     gfx_draw(tr, 2);
     fx_end();
   } else render_clear(C_VOID);
+#ifndef CK_NOUI   /* test builds: clean frames (the web page's backdrop came from one) */
   ui_draw();
+#endif
   dance_draw();
 }

@@ -57,3 +57,8 @@ lambert+vcol+fog+ds+l1001
 lambert+vcol+fog+l1001
 standard+fog+l1001
 standard+map+fog+rep+emap+skin+l1001
+basic+ds
+basic+map+trans+instbig+ds+icol
+basic+vcol+instbig+ds
+lambert+vcol+fog+instbig+ds+l1001
+lambert+vcol+instbig+fog2+ds+l1b01
