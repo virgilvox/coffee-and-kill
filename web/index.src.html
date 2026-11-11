@@ -65,7 +65,15 @@ kbd { display: inline-block; min-width: 20px; padding: 2px 5px 3px; margin: 0 1p
 .foot { grid-column: 1 / -1; color: #c9c0b0; font-size: 11px; line-height: 1.6; max-width: 1070px; background: rgba(20,17,13,.85); padding: 8px 12px; border-left: 4px solid var(--pink); }
 .foot a, .foot button { color: var(--pink); background: none; border: 0; font: inherit; cursor: pointer; padding: 0; text-decoration: underline; }
 @media (max-height: 760px) { .card { padding-top: 26px; gap: 16px 30px; } .left { gap: 14px; } .pitch { font-size: 12.5px; } .ctl td { padding: 1px 5px; } #go { font-size: 24px; padding: 12px 30px; } }
-@media (max-width: 960px) { .card { grid-template-columns: minmax(0, 560px); } .ctl td { white-space: normal; } }
+@media (max-width: 960px) { .card { grid-template-columns: minmax(0, 1fr); padding: 64px 16px 40px; } .ctl td { white-space: normal; } }
+/* narrow screens: the table scrolls inside its card instead of running off the page */
+.tablewrap { overflow-x: auto; max-width: 100%; }
+.ctl td[colspan], .ctl td:last-child { white-space: normal; }
+.ctl { min-width: 0; max-width: 100%; }
+.pitch, .tag { overflow-wrap: anywhere; }
+/* a phone: this page is the big screen; the note says how to play with a phone */
+#phone { display: none; background: var(--cream); color: var(--ink); border: 3px solid var(--ink); box-shadow: 5px 5px 0 var(--cyan); padding: 10px 12px; font-size: 13px; line-height: 1.5; }
+#phone.show { display: block; }
 #over { position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center; background: rgba(20,17,13,.9);
   border: 4px dashed var(--pink); font-size: 22px; color: var(--pink); }
 #over.show { display: flex; }
@@ -87,11 +95,12 @@ kbd { display: inline-block; min-width: 20px; padding: 2px 5px 3px; margin: 0 1p
       <p class="tag">brew first. break things. <em>swing wrenches.</em></p>
       <p class="pitch">MOHEEB and LUIS, and now the whole of KEYHOLDER's day: Vee, Dex and Ruth, Vinyl Vic, Rennick and Dobbs, High Score, Bex, Copper Cal, Root and Brant Holloway. Nine weapons, from the pipe wrench to the Spool Naginata, each with its own EXTREME. Fight in the workshop, the lab, on Main Street, in the back lot or the Battle Zone arenas, against a friend, the CPU, or a bracket of eight in TOURNEY. Best of three, a dance break between rounds.</p>
       <div class="go-row"><button id="go" class="display" disabled>LOADING</button><span id="status">starting</span></div>
+      <div id="phone">This page is the big screen: it needs a keyboard, a mouse or a gamepad. To play with your phone, open this page on a computer or TV, choose PHONE PADS in the game and scan its code with the phone. The phone becomes the controller.</div>
       <div id="err"></div>
     </div>
     <div class="ctl">
       <h2 class="display">CONTROLS</h2>
-      <table>
+      <div class="tablewrap"><table>
         <tr><th></th><th>ONE PLAYER</th><th>TWO PLAYERS</th><th>GAMEPAD</th></tr>
         <tr><td>MOVE</td><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows</td><td>P1 <kbd>WASD</kbd> P2 arrows</td><td><span class="pb">STICK</span></td></tr>
         <tr><td>LIGHT</td><td><kbd>Q</kbd> <kbd>J</kbd> <kbd>Z</kbd></td><td><kbd>Q</kbd> / <kbd>,</kbd></td><td><span class="pb x">X</span></td></tr>
@@ -101,9 +110,9 @@ kbd { display: inline-block; min-width: 20px; padding: 2px 5px 3px; margin: 0 1p
         <tr><td>DODGE</td><td><kbd>SHIFT</kbd> <kbd>I</kbd></td><td><kbd>L SHIFT</kbd> / <kbd>ENTER</kbd></td><td><span class="pb a">A</span></td></tr>
         <tr><td>EXTREME</td><td><kbd>F</kbd> <kbd>O</kbd> <kbd>B</kbd></td><td><kbd>F</kbd> / <kbd>'</kbd></td><td><span class="pb">RT</span></td></tr>
         <tr><td>PAUSE</td><td colspan="2"><kbd>ESC</kbd> <kbd>P</kbd>, <kbd>M</kbd> mutes, <kbd>N</kbd> music</td><td><span class="pb">START</span></td></tr>
-        <tr><td>MENUS</td><td colspan="2">arrows, <kbd>ENTER</kbd>, <kbd>ESC</kbd>, <kbd>TAB</kbd>, the mouse</td><td><span class="pb">D-PAD</span> <span class="pb a">A</span> <span class="pb b">B</span> <span class="pb y">Y</span></td></tr>
-      </table>
-      <p>In one player every pad drives P1; in two players pad 1 is P1 and pad 2 is P2. TAB swaps sides on the fighter select; in TOURNEY setup ENTER picks who plays an entrant and TAB its weapon. Online versus pairs with other carts and with the original web version.</p>
+        <tr><td>MENUS</td><td colspan="2">arrows, <kbd>ENTER</kbd> picks, <kbd>ESC</kbd> or <kbd>BACKSPACE</kbd> back, <kbd>TAB</kbd> swaps sides, <kbd>E</kbd> colour, the mouse</td><td><span class="pb">D-PAD</span> <span class="pb a">A</span> <span class="pb b">B</span> <span class="pb y">Y</span> <span class="pb">LB</span> <span class="pb">RB</span></td></tr>
+      </table></div>
+      <p>In one player every pad drives P1; in two players pad 1 is P1 and pad 2 is P2, and on the fighter select the keyboard splits: P1 <kbd>WASD</kbd> <kbd>Q</kbd> picks, <kbd>R</kbd> back, <kbd>E</kbd> colour; P2 arrows, <kbd>,</kbd> picks, <kbd>/</kbd> back, <kbd>.</kbd> colour. In full screen some browsers take <kbd>ESC</kbd>: <kbd>P</kbd> pauses and <kbd>BACKSPACE</kbd> goes back. Online versus pairs with other carts and with the original web version.</p>
     </div>
     <div class="foot">The web version of COFFEE &amp; KILL is at weird.link/coffeekill. Animations: Quaternius Universal Animation Library 1 and 2 (CC0). Props: Kenney Survival and Factory kits (CC0). From KEYHOLDER: characters from the VRoid Project samples, the lab from the HSL-108 model of HeatSync Labs, 108 West Main, Mesa, downtown from OpenStreetMap contributors and BikeMesa by Luis Montes; venue names and signs belong to their owners. Engine: three.js by way of three.c, wasmcart. Fonts: Archivo, IBM Plex Mono and JetBrains Mono (SIL OFL). HeatSync Labs does not settle anything by wrench. <a id="pick" href="#" onclick="return false">Load another cart</a>.
       <input type="file" id="file" accept=".wasc,application/zip" hidden></div>
@@ -195,16 +204,20 @@ Object.assign(HID, { Digit0: 0x27, Enter: 0x28, Escape: 0x29, Backspace: 0x2A, T
   ShiftLeft: 0xE1, ShiftRight: 0xE5, ControlLeft: 0xE0, ControlRight: 0xE4, AltLeft: 0xE2, AltRight: 0xE6, NumpadEnter: 0x28 });
 const GAME_KEYS = new Set(['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Backspace', 'Quote', 'Slash']);
 const pressed = new Set();
+/* the cart reads the keys frame by frame: a tap shorter than a frame (a fast typist, a synthetic
+   event) is held down until one has passed, as the mouse's clicks are below */
+const keyAt = new Map();
 window.addEventListener('keydown', (e) => {
   const c = HID[e.code]; if (c === undefined) return;
   if (e.metaKey || (e.ctrlKey && !GAME_KEYS.has(e.code))) return;
   e.preventDefault();
   if (!host || e.repeat || !gateGone()) return;
-  pressed.add(c); host.keyDown(c, 0);
+  pressed.add(c); keyAt.set(c, performance.now()); host.keyDown(c, 0);
 }, true);
 window.addEventListener('keyup', (e) => {
   const c = HID[e.code]; if (c === undefined || !host) return;
-  pressed.delete(c); host.keyUp(c, 0);
+  const wait = Math.max(0, 50 - (performance.now() - (keyAt.get(c) || 0)));
+  setTimeout(() => { if (!host) return; pressed.delete(c); host.keyUp(c, 0); }, wait);
 }, true);
 function releaseAll() { if (!host) return; for (const c of pressed) host.keyUp(c, 0); pressed.clear(); host.setPointer(0, -1, -1, 0, false); }
 window.addEventListener('blur', releaseAll);
@@ -242,6 +255,15 @@ $('btnFull').onclick = async () => {
   try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch {}
   canvas.focus();
 };
+/* in full screen Escape is the game's (back, pause): Chromium lets a page keep it with the Keyboard
+   Lock API, so holding Escape leaves full screen instead of a single press. Elsewhere P pauses and
+   Backspace goes back. */
+document.addEventListener('fullscreenchange', () => {
+  try {
+    if (document.fullscreenElement && navigator.keyboard && navigator.keyboard.lock) navigator.keyboard.lock(['Escape']).catch(() => {});
+    else if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock();
+  } catch {}
+});
 let hotTimer = 0;
 window.addEventListener('mousemove', () => { document.body.classList.add('hot'); clearTimeout(hotTimer); hotTimer = setTimeout(() => document.body.classList.remove('hot'), 2500); });
 
@@ -342,9 +364,22 @@ async function boot() {
   $('go').disabled = false; $('go').textContent = 'PLAY';
   $('go').onclick = enterGame;
   window.addEventListener('keydown', (e) => { if (!gateGone() && (e.code === 'Enter' || e.code === 'Space') && !$('go').disabled) { e.preventDefault(); enterGame(); } });
+  // a gamepad on the start card: A or Start plays (the pad's first press after it wakes counts)
+  let padWas = true;
+  (function gatePads() {
+    if (gateGone()) return;
+    let down = false;
+    try { for (const gp of navigator.getGamepads ? navigator.getGamepads() : []) if (gp && gp.connected && ((gp.buttons[0] && gp.buttons[0].pressed) || (gp.buttons[9] && gp.buttons[9].pressed))) down = true; } catch {}
+    if (down && !padWas) { enterGame(); return; }
+    padWas = down;
+    requestAnimationFrame(gatePads);
+  })();
+  window.addEventListener('gamepadconnected', () => setStatus('ready: press A or START on the pad'));
   // tests and links can skip the card with ?autostart
   if (/[?&]autostart/.test(location.search)) enterGame();
 }
+// a touch screen with no fine pointer is a phone or a tablet: say how phones play
+try { if (matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) $('phone').classList.add('show'); } catch {}
 boot();
 })();
 </script>

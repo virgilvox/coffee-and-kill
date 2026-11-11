@@ -733,6 +733,8 @@ static void online_key(int code) {
 void scr_key(int e) {
   const char *P = scr_cur;
   if (!P) return;
+  /* Backspace is back too (a browser in full screen may keep Escape), except where it edits text */
+  if (e == WC_KEY_BACKSPACE && !(!strcmp(P, "s-online") && ui_online.focus)) e = WC_KEY_ESCAPE;
   if (select_modal_active()) { select_key(e == CK_KEY_START ? WC_KEY_ENTER : e); return; }
   /* a pad's Start: the tourney's screens take it (begin, play); elsewhere it is Enter */
   if (e == CK_KEY_START && strcmp(P, "s-tsetup") && strcmp(P, "s-bracket")) e = WC_KEY_ENTER;
