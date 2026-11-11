@@ -147,7 +147,40 @@ void focus_ring(cv *c, float x, float y, float w, float h) {   /* outline: 3px d
 }
 
 /* ================================================================== load */
-static struct { trans_t bar; char msg[96]; bool err; layer msgL; float msg_w; layer ld; } LD;
+static struct { trans_t bar; char msg[96]; bool err; layer msgL; float msg_w; layer ld; bool vs; layer vsL; } LD;
+
+/* the card while a match's stage loads: the two fighters face to face, their weapons, the stage */
+void ui_load_vs(const char *stage, const char *tag0, const char *tag1) {
+  LD.vs = true;
+  L_ensure(&LD.vsL, CK_W, 480);
+  cv *c = LD.vsL.c;
+  static const tshadow HS = {5, {{5, 5, COL(C_PINK)}, {-2, -2, COL(C_INK)}, {2, -2, COL(C_INK)}, {-2, 2, COL(C_INK)}, {2, 2, COL(C_INK)}}};
+  float sw = t_width(F_TYPE, 16, 5.1f, stage);
+  t_draw(c, F_TYPE, 16, 5.1f, 640 - sw / 2, 40, stage, COL(C_PINK));
+  for (int g = 0; g < 2 && scr_sel; g++) {
+    int f = roster_index(scr_sel->slots[g].ch); if (f < 0) f = g;
+    int w = weapon_index(scr_sel->slots[g].weapon); if (w < 0) w = 0;
+    const roster_entry *e = roster_get(f);
+    uint32_t col = g ? C_CYAN : C_PINK;
+    float cx = g ? 920 : 360, x = cx - 110;
+    c_box(c, x, 80, 220, 220, COL(C_PAPER), 4, COL(C_INK), 8, 8, COL(col));
+    select_face(c, f, x + 4, 84, 212, 212);
+    c_rect(c, x + 4, 290, 212, 6, COL(e->color));
+    const char *tg = g ? tag1 : tag0;
+    float tw = t_width(F_LCD, 20, 0, tg) + 16;
+    c_box(c, x, 54, tw, 30, COL(col), 3, COL(C_INK), 0, 0, COL(0));
+    t_draw(c, F_LCD, 20, 0, x + 8, 76, tg, COL(C_INK));
+    float fs = 44; while (fs > 26 && t_width(F_MARKER, fs, 0.4f, e->name) > 420) fs -= 1;
+    float nw = t_width(F_MARKER, fs, 0.4f, e->name);
+    tshadow sh = {5, {{5, 5, COL(col)}, {-2, -2, COL(C_INK)}, {2, -2, COL(C_INK)}, {-2, 2, COL(C_INK)}, {2, 2, COL(C_INK)}}};
+    t_draw_sh(c, F_MARKER, fs, 0.4f, cx - nw / 2, 362, e->name, COL(C_CREAM), &sh);
+    const char *wn = WEAPONS[w].name;
+    float ww = t_width(F_TYPE, 16, 1.6f, wn);
+    t_draw(c, F_TYPE, 16, 1.6f, cx - ww / 2, 396, wn, COL(C_CREAM));
+  }
+  float vw = t_width(F_MARKER, 96, 0, "VS");
+  t_draw_sh(c, F_MARKER, 96, 0, 640 - vw / 2, 240, "VS", COL(C_CREAM), &HS);
+}
 
 static void load_paint_msg(void) {
   float w = t_width(F_TYPE, 14, 2.8f, LD.msg);
@@ -161,6 +194,14 @@ void scr_load(float p, const char *msg, bool err) {
 }
 static void load_draw(void) {
   ov_fill(0, 0, CK_W, CK_H, C_VOID, 1);
+  if (LD.vs) {   /* a match's stage loading: the fighters, then the bar under them */
+    L_upload(&LD.vsL); ov_draw(LD.vsL.t, 0, 60, 1);
+    ov_fill(380, 518, 520, 4, C_CREAM, 1); ov_fill(380, 532, 520, 4, C_CREAM, 1);
+    ov_fill(380, 522, 4, 10, C_CREAM, 1); ov_fill(896, 522, 4, 10, C_CREAM, 1);
+    ov_fill(386, 524, 508 * tr_get(&LD.bar, ui_now) / 100.f, 6, C_PINK, 1);
+    if (LD.msgL.c) { L_upload(&LD.msgL); ov_draw(LD.msgL.t, 640 - LD.msg_w / 2, 556, 1); }
+    return;
+  }
   if (!LD.ld.c) {   /* .ld: marker 84, shadow 6 6 pink; 423.45 wide at y 278 */
     L_ensure(&LD.ld, 440, 100);
     t_draw_sh(LD.ld.c, F_MARKER, 84, 0, 0, t_asc(F_MARKER, 84), "LOADING", COL(C_CREAM), &(tshadow){1, {{6, 6, COL(C_PINK)}}});
@@ -479,6 +520,7 @@ void scr_init(void) {
 
 void scr_show(const char *id) {
   scr_cur = id;
+  if (!id || strcmp(id, "s-load")) LD.vs = false;
   if (!id) return;
   if (!strcmp(id, "s-title") || !strcmp(id, "s-pause") || !strcmp(id, "s-end")) {
     scr_menu_idx = 0;

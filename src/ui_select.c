@@ -75,6 +75,8 @@ static void portrait_paint(cv *c, int f, float x, float y, float w, float h) {
   t_draw(c, F_MARKER, fs, 0, x + (w - tw) / 2, y + h / 2 + fs * 0.36f, in, COL(C_INK));
 }
 
+void select_face(cv *c, int fighter, float x, float y, float w, float h) { portrait_paint(c, fighter, x, y, w, h); }
+
 /* ---------------------------------------------------------------- state */
 enum { SS_FIGHTER, SS_WEAPON, SS_LEVEL, SS_READY };
 typedef struct {

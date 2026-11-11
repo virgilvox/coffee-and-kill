@@ -296,7 +296,10 @@ static void go_match(void) {
   if (s >= STAGE_N) s = 0;
   if (stage_current() == s || !stage_needs_load(s)) { use_stage(s); start_match(); return; }
   pending_stage = s; pending_step = 0;
-  ui_show("s-load"); ui_load(0.1f, "walking over to the lab");
+  const char *a, *b; labels(&a, &b);
+  int k = STAGES[s].kind;
+  ui_show("s-load"); ui_load_vs(STAGES[s].name, a, b);
+  ui_load(0.1f, k == STK_KH_LAB ? "walking over to the lab" : k == STK_KH_TOWN ? "heading out onto West Main" : "opening up the Battle Zone");
 }
 static bool pending_frame(void) {
   if (pending_stage < 0) return false;
@@ -1439,6 +1442,7 @@ void game_init(void) {
   G.sel.stage = CK_STAGE;
 #endif
   fx_init(); gfx_init(); ui_init(); dance_init(); online_init();
+  ui_set_select(&G.sel, G.mode);
   ui_cb.act = act; ui_cb.diff = cb_diff; ui_cb.stage = cb_stage;
   ui_cb.pick = cb_pick; ui_cb.cheer = cb_cheer;
   sfx_tap = sfx_tapped;

@@ -81,6 +81,9 @@ void ui_hud(bool on);
 /* the end card: name is "MOHEEB" with wins true for "<name> <em>WINS</em>", or "DRAW" */
 void ui_set_end(const char *name, bool wins, const char *sub);
 void ui_load(float p, const char *msg);
+/* the loading card for a match: the selection's two fighters (ui_set_select) face to face, with
+ * their tags (P1, CPU) and the stage's name; ui_load moves its bar. Until the next ui_show. */
+void ui_load_vs(const char *stage, const char *tag0, const char *tag1);
 void ui_load_error(const char *msg);
 
 /* #s-online: the state online.c shows (fields are edited here, by ui_key and input_text) */

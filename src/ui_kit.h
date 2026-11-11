@@ -53,6 +53,7 @@ void select_pointer(float x, float y, bool pressed);
 void select_modal_open(int fighter, void (*done)(int fighter));
 bool select_modal_active(void);
 void select_modal_close(void);
+void select_face(cv *c, int fighter, float x, float y, float w, float h);   /* a fighter's portrait */
 
 /* ui_menus.c: the select, stage and tourney screens */
 void menus_init(void);
