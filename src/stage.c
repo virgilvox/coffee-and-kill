@@ -152,30 +152,54 @@ void stage_fx_frame(t3_camera *cam) {
   else fx_frame(cam, 0, 0, 0);
 }
 
+/* the workshop: how far along look_at -> pos the first big prop starts (1: nothing in the way;
+ * the slab test on each box arena.c keeps) */
+static float ws_block(v3 look_at, v3 pos) {
+  const t3_box3 *B; int n = arena_obstacles(&B);
+  float o[3] = {look_at.x, look_at.y, look_at.z}, dv[3] = {pos.x - look_at.x, pos.y - look_at.y, pos.z - look_at.z}, hit = 1;
+  for (int i = 0; i < n; i++) {
+    float lo[3] = {B[i].min.x, B[i].min.y, B[i].min.z}, hi[3] = {B[i].max.x, B[i].max.y, B[i].max.z}, t0 = 0, t1 = 1;
+    bool in = true;
+    for (int a = 0; a < 3 && in; a++) {
+      if (fabsf(dv[a]) < 1e-6f) { if (o[a] < lo[a] || o[a] > hi[a]) in = false; continue; }
+      float u = (lo[a] - o[a]) / dv[a], w = (hi[a] - o[a]) / dv[a];
+      if (u > w) { float x = u; u = w; w = x; }
+      t0 = fmaxf(t0, u); t1 = fminf(t1, w);
+      if (t0 > t1) in = false;
+    }
+    if (in && t0 > 0 && t0 < hit) hit = t0;
+  }
+  return hit;
+}
+static v3 ws_clamp(v3 p) {
+  p.x = ck_clamp(p.x, -ROOM_HX + 1, ROOM_HX - 1); p.z = ck_clamp(p.z, -ROOM_HZ + 1, ROOM_HZ - 1);
+  return p;
+}
+
 void stage_camera(v3 look_at, v3 *pos) {
   if (cur < 0) return;
   const stage_def *d = &STAGES[cur];
   if (d->kind == STK_WORKSHOP) {
-    pos->x = ck_clamp(pos->x, -ROOM_HX + 1, ROOM_HX - 1); pos->z = ck_clamp(pos->z, -ROOM_HZ + 1, ROOM_HZ - 1);
-    /* and in front of the first prop between the fight and the lens (the slab test on each box) */
-    const t3_box3 *B; int n = arena_obstacles(&B);
-    float o[3] = {look_at.x, look_at.y, look_at.z}, dv[3] = {pos->x - look_at.x, pos->y - look_at.y, pos->z - look_at.z}, hit = 1;
-    for (int i = 0; i < n; i++) {
-      float lo[3] = {B[i].min.x, B[i].min.y, B[i].min.z}, hi[3] = {B[i].max.x, B[i].max.y, B[i].max.z}, t0 = 0, t1 = 1;
-      bool in = true;
-      for (int a = 0; a < 3 && in; a++) {
-        if (fabsf(dv[a]) < 1e-6f) { if (o[a] < lo[a] || o[a] > hi[a]) in = false; continue; }
-        float u = (lo[a] - o[a]) / dv[a], w = (hi[a] - o[a]) / dv[a];
-        if (u > w) { float x = u; u = w; w = x; }
-        t0 = fmaxf(t0, u); t1 = fminf(t1, w);
-        if (t0 > t1) in = false;
-      }
-      if (in && t0 > 0 && t0 < hit) hit = t0;
+    /* A big prop between the fight and the lens: swing the lens round the fight, at the same
+     * distance, to the nearest clear side (up to 60 degrees, the last swing tried first so it
+     * does not flip from side to side). Pulling the lens in front of the prop instead brings it
+     * so close that the fighters fall out of the frame. Only when no swing is clear is it pulled
+     * in. */
+    static float swing;
+    v3 p = ws_clamp(*pos);
+    if (ws_block(look_at, p) >= 1) { swing = 0; *pos = p; return; }
+    float dx = pos->x - look_at.x, dz = pos->z - look_at.z;
+    float tries[13]; int nt = 0;
+    if (swing != 0) tries[nt++] = swing;
+    for (int k = 1; k <= 6; k++) { tries[nt++] = k * 0.1745f; tries[nt++] = -k * 0.1745f; }
+    for (int i = 0; i < nt; i++) {
+      float c = cosf(tries[i]), s = sinf(tries[i]);
+      v3 q = ws_clamp((v3){look_at.x + dx * c - dz * s, pos->y, look_at.z + dx * s + dz * c});
+      if (ws_block(look_at, q) >= 1) { swing = tries[i]; *pos = q; return; }
     }
-    if (hit < 1) {
-      float k = fmaxf(hit - 0.04f, 0.35f);
-      pos->x = look_at.x + dv[0] * k; pos->y = look_at.y + dv[1] * k; pos->z = look_at.z + dv[2] * k;
-    }
+    swing = 0;
+    float hit = ws_block(look_at, p), k = fmaxf(hit - 0.04f, 0.35f);
+    pos->x = look_at.x + (p.x - look_at.x) * k; pos->y = look_at.y + (p.y - look_at.y) * k; pos->z = look_at.z + (p.z - look_at.z) * k;
     return;
   }
   if (!d->cam_clear) return;

@@ -771,7 +771,11 @@ static void update_camera(float A) {
       fighter *u = G.f[1 - kw];
       v3 *up = fighter_pos(u);
       float T = fminf(1, G.phase_t * 0.8f);
-      a = ck_lerp(a, 3.4f, T); c = ck_lerp(c, 1.1f, T);
+      /* in close on the loser, but never so close that a blow that carried them far puts the
+       * winner at the edge: the winner stands 0.6 r from the look point, and 1.7 r keeps them
+       * within the middle half of the frame (a lens swung round a prop brings them nearer) */
+      float ako = fminf(fmaxf(3.4f, 1.7f * r), fmaxf(amax, 3.4f));
+      a = ck_lerp(a, ako, T); c = ck_lerp(c, 1.1f, T);
       n.x += (up->x - n.x) * 0.4f * T; n.z += (up->z - n.z) * 0.4f * T;
     }
     for (int k = 0; k < 2; k++) if (G.f[k]->state == ST_ATTACK && G.f[k]->move == MV_SPECIAL) { a *= 0.85f; break; }
