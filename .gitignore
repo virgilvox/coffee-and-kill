@@ -1,0 +1,10 @@
+build/
+build-*/
+out/
+node_modules/
+web/*.wasc
+web/coffee-and-kill.html
+third_party/three.c/build/
+third_party/three.c/test/assets/
+.DS_Store
+*.log
