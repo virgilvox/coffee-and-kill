@@ -389,12 +389,19 @@ static void online_paint(void) {
       float x = cx + 100;
       chip_paint(c, x, cy + ry[k], "<", false); ol_ctl[nol_ctl++] = (hit_t){x, cy + ry[k], chip_w("<"), 34, kind[k], -1, 0, ""};
       x += chip_w("<") + 10;
+      float vx = x;
+      if (k == 0 && fi >= 0) {   /* the fighter's face; the name opens the fighter grid */
+        c_box(c, x, cy + ry[k], 34, 34, COL(C_PAPER), 2, COL(C_INK), 0, 0, COL(0));
+        select_face(c, fi, x + 2, cy + ry[k] + 2, 30, 30);
+        x += 42;
+      }
       t_draw(c, F_MARKER, 20, 0, x, cy + ry[k] + 5 + t_asc(F_MARKER, 20), val[k], COL(C_INK));
       x += t_width(F_MARKER, 20, 0, val[k]) + 10;
+      if (k == 0) ol_ctl[nol_ctl++] = (hit_t){vx, cy + ry[k], x - vx - 4, 34, H_OLFG, 0, 0, ""};
       chip_paint(c, x, cy + ry[k], ">", false); ol_ctl[nol_ctl++] = (hit_t){x, cy + ry[k], chip_w(">"), 34, kind[k], 1, 0, ""};
     }
     const char *note = "VERSUS THE WEB VERSION: MOHEEB AND LUIS IN THE WORKSHOP";
-    t_draw(c, F_TYPE, 11, 1.1f, cx, cy + y_nt + t_asc(F_TYPE, 11), note, COLA(C_INK, 0.6f));
+    t_draw(c, F_TYPE, 14, 0.6f, cx, cy + y_nt + t_asc(F_TYPE, 14) - 2, note, COLA(C_INK, 0.7f));
   }
   /* status */
   for (int k = 0; k < ns; k++) t_draw(c, F_TYPE, 13, 1.82f, cx, cy + y_st + k * 17 + t_asc(F_TYPE, 13), st[k], COL(C_INK));
@@ -536,7 +543,7 @@ void scr_show(const char *id) {
   }
   kbd_nav = input_last_dev != DEV_MOUSE;   /* a pad or the keys: the focus shows from the start */
   if (menus_owns(id)) { menus_show(id); return; }
-  if (!strcmp(id, "s-online")) { ol_focus = 0; online_paint(); }
+  if (!strcmp(id, "s-online")) { ol_focus = 0; if (kbd_nav) ui_online.focus = 1; online_paint(); }
   if (!strcmp(id, "s-pads")) { pd_focus = 0; pads_paint(); }
 }
 
@@ -612,12 +619,19 @@ void scr_draw(void) {
 
 static void act(const char *a) { sfx_ui_ok(); if (ui_cb.act) ui_cb.act(a); }
 
+static void online_paint(void);
+static void ol_grid_done(int f) {
+  if (f >= 0 && ui_on_olfighter) { ui_on_olfighter(ROSTER[f].key); sfx_ui_ok(); }
+  select_modal_close();
+  online_paint();
+}
 static void click_hit(const hit_t *h) {
   switch (h->kind) {
     case H_ACT: act(h->s); break;
     case H_OLW: { int w = (weapon_index(ui_online.weapon) + h->a + WEAPON_N) % WEAPON_N; if (ui_on_olweapon) ui_on_olweapon(WEAPONS[w].key); sfx_ui(); break; }
     case H_OLF: { int f = (roster_index(ui_online.fighter) + h->a + ROSTER_N) % ROSTER_N; if (ui_on_olfighter) ui_on_olfighter(ROSTER[f].key); sfx_ui(); break; }
     case H_OLS: { int g = (stage_index(ui_online.stage) + h->a + STAGE_N) % STAGE_N; if (ui_on_olstage) ui_on_olstage(STAGES[g].key); sfx_ui(); break; }
+    case H_OLFG: sfx_ui(); select_modal_open(roster_index(ui_online.fighter), "ONLINE", ol_grid_done); break;
     case H_CH: if (ui_on_challenge) ui_on_challenge(ui_online.peers[h->a].id); break;
     case H_FIELD: ui_online.focus = h->a; online_paint(); break;
   }

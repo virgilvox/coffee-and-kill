@@ -28,7 +28,7 @@ bool btn_hit(const btn_t *b, float x, float y);
 
 /* hit rects of a painted screen */
 typedef struct { float x, y, w, h; int kind; int a, b; char s[20]; } hit_t;
-enum { H_ACT, H_WEAPON, H_SWAP, H_DIFF, H_FIELD, H_OLW, H_CH, H_FIGHTER, H_STAGE, H_TCTL, H_TFIGHTER, H_TWEAPON, H_TSIZE, H_TSTAGE, H_OLF, H_OLS };
+enum { H_ACT, H_WEAPON, H_SWAP, H_DIFF, H_FIELD, H_OLW, H_CH, H_FIGHTER, H_STAGE, H_TCTL, H_TFIGHTER, H_TWEAPON, H_TSIZE, H_TSTAGE, H_OLF, H_OLS, H_OLFG };
 extern hit_t hits[64]; extern int nhits;
 void hit_add(float x, float y, float w, float h, int kind, int a, int b, const char *s);
 
