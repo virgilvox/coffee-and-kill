@@ -36,6 +36,7 @@ t3_object *body_grip(body *b, int hand);
 void body_animate(body *b, float dt);
 /* a jump to a new place (a round start): the hair settles instead of swinging there */
 void body_teleport(body *b);
+void body_visible(body *b, bool on);
 /* a blob shadow under the body, for stages without shadow maps */
 void body_blob_shadow(body *b, bool on);
 

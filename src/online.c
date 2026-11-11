@@ -3,13 +3,22 @@
  * timings are the page's, so cart and web players share rooms.
  *
  * The page builds its share links from location.href; the cart uses the
- * page's public address, weird.link/coffeekill, which keeps the query. */
+ * page's public address, weird.link/coffeekill, which keeps the query.
+ *
+ * Carts say more than the page does: every presence, challenge and answer carries an "x" map
+ * (v: the protocol, 2; c: the fighter; w: the weapon; g: the stage) that the page ignores. Two
+ * carts that both send it fight with their own picks on the challenger's stage; against the
+ * page (no "x") it is MOHEEB against LUIS in the workshop with the page's four weapons, so the
+ * page's wire, its "w" and its snapshots, never see anything it does not know. */
 #include "online.h"
 #include "net.h"
 #include "ui.h"
 #include "game.h"
 #include "input.h"
 #include "fighter.h"
+#include "roster.h"
+#include "weapons.h"
+#include "stage.h"
 #include "qr.h"
 #include "ck.h"
 #include <stdio.h>
@@ -20,6 +29,7 @@
 #define CS "/coffeekill/v1"
 #define LOBBY "LOBBY"
 #define PAGE_URL "https://weird.link/coffeekill"
+#define WIRE_V 2   /* this cart's extension of the page's messages (the "x" map) */
 
 static double now_ms(void) { return ck_now() * 1000; }
 static void q8(char *out) {   /* Math.random().toString(36).slice(2, 8) */
@@ -43,9 +53,12 @@ static void upper_clean(char *dst, const char *src, int max, bool room) {
 }
 
 /* ---- Cv: the lobby ---- */
-typedef struct { char id[16], n[16], w[12]; double q; int s; double seen, first; } peer;
+typedef struct { char id[16], n[16], w[12], c[12]; int v; double q; int s; double seen, first; } peer;
+/* what a side brings: the page's "w", and a cart's "x" */
+typedef struct { int v; char c[12], w[12], g[12]; } ext_t;
 static struct {
   char id[16], name[16], weapon[12], room[20];
+  char fighter[12], stage[12];      /* this cart's picks (the "x" map) */
   bool in_lobby, busy;
   peer peers[16]; int npeers;
   int subs[2];
@@ -53,7 +66,7 @@ static struct {
   double hb;                        /* the heartbeat timer (1.5 s) */
   bool pending; char pend_to[16], pend_mid[16]; double pend_at;
   /* a challenge shown to us (fv.chal) */
-  bool chal; char ch_from[16], ch_n[16], ch_w[12], ch_mid[16]; double ch_at;
+  bool chal; char ch_from[16], ch_n[16], ch_w[12], ch_mid[16]; double ch_at; ext_t ch_x;
   /* the match */
   bool in_match; int role; char mid[16]; char opp_id[16], opp_n[16], opp_w[12];
   int msubs[3]; double last_in; bool closed;
@@ -64,12 +77,36 @@ static void fire_peers(void);
 static int peer_cmp(const void *a, const void *b) { double d = ((const peer *)a)->first - ((const peer *)b)->first; return d < 0 ? -1 : d > 0; }
 static void list_sorted(void) { qsort(L.peers, L.npeers, sizeof(peer), peer_cmp); }
 
+/* the weapon the page may see: ours if it is on the page's rack, else the pipe wrench */
+static const char *web_weapon(void) { int w = weapon_index(L.weapon); return w >= 0 && WEAPONS[w].web ? L.weapon : "pipe"; }
+static mp_val *ext_map(void) {
+  mp_val *x = mp_map();
+  mp_set(x, "v", mp_num(WIRE_V)); mp_set(x, "c", mp_str(L.fighter)); mp_set(x, "w", mp_str(L.weapon)); mp_set(x, "g", mp_str(L.stage));
+  return x;
+}
+static ext_t ext_read(const mp_val *A) {
+  ext_t e = {0};
+  const mp_val *x = mp_get(A, "x");
+  if (x && x->t == MP_MAP) {
+    e.v = (int)mp_getn(x, "v", 0);
+    snprintf(e.c, sizeof e.c, "%s", mp_gets(x, "c", "")); snprintf(e.w, sizeof e.w, "%s", mp_gets(x, "w", "")); snprintf(e.g, sizeof e.g, "%s", mp_gets(x, "g", ""));
+    if (roster_index(e.c) < 0 || weapon_index(e.w) < 0) e.v = 0;   /* a newer cart's pick this one lacks: fight the page's way */
+  }
+  return e;
+}
+/* the page's message plus our "x" */
+static mp_val *msg(const char *k, const char *mid) {
+  mp_val *m = mp_map(); mp_set(m, "k", mp_str(k)); mp_set(m, "from", mp_str(L.id)); mp_set(m, "n", mp_str(L.name));
+  mp_set(m, "w", mp_str(web_weapon())); mp_set(m, "mid", mp_str(mid)); mp_set(m, "x", ext_map());
+  return m;
+}
+
 static void beat(void) {
   if (!L.in_lobby) return;
   char a[96]; snprintf(a, sizeof a, CS "/r/%s/p/%s", L.room, L.id);
   mp_val *v = mp_map();
-  mp_set(v, "n", mp_str(L.name)); mp_set(v, "w", mp_str(L.weapon)); mp_set(v, "q", mp_num(++L.seq));
-  mp_set(v, "s", mp_num(L.busy ? 1 : 0)); mp_set(v, "f", mp_str(L.id));
+  mp_set(v, "n", mp_str(L.name)); mp_set(v, "w", mp_str(web_weapon())); mp_set(v, "q", mp_num(++L.seq));
+  mp_set(v, "s", mp_num(L.busy ? 1 : 0)); mp_set(v, "f", mp_str(L.id)); mp_set(v, "x", ext_map());
   clasp_set(a, v, 8e6);
   mp_free(v);
 }
@@ -92,12 +129,14 @@ static void on_presence(const mp_val *A, const char *addr, void *ctx) {
     double first = t ? t->first : D;
     if (!t) { if (L.npeers >= 16) return; t = &L.peers[L.npeers++]; }
     snprintf(t->id, 16, "%s", e); snprintf(t->n, 16, "%s", mp_gets(A, "n", "?")); snprintf(t->w, 12, "%s", mp_gets(A, "w", ""));
+    ext_t x = ext_read(A); t->v = x.v; snprintf(t->c, sizeof t->c, "%s", x.v ? x.c : "");
+    if (x.v) snprintf(t->w, 12, "%s", x.w);
     t->q = q; t->s = (int)mp_getn(A, "s", 0); t->seen = D; t->first = first;
     fire_peers();
   }
 }
 
-static void start_match(int role, const char *mid, const char *opp_id, const char *opp_n, const char *opp_w);
+static void start_match(int role, const char *mid, const char *opp_id, const char *opp_n, const char *opp_w, ext_t opp_x);
 
 static void inbox_send(const char *to, mp_val *v) {
   char a[96]; snprintf(a, sizeof a, CS "/r/%s/p/%s/in", L.room, to);
@@ -118,10 +157,11 @@ static void on_inbox(const mp_val *A, const char *addr, void *ctx) {
     L.chal = true; L.ch_at = now_ms();
     snprintf(L.ch_from, 16, "%s", mp_gets(A, "from", "")); snprintf(L.ch_n, 16, "%s", mp_gets(A, "n", "PLAYER"));
     snprintf(L.ch_w, 12, "%s", mp_gets(A, "w", "pipe")); snprintf(L.ch_mid, 16, "%s", mp_gets(A, "mid", ""));
+    L.ch_x = ext_read(A);
     ui_online.challenge = true; snprintf(ui_online.chtxt, sizeof ui_online.chtxt, "%s CHALLENGES YOU", L.ch_n);
   } else if (!strcmp(k, "ok") && L.pending && !strcmp(L.pend_mid, mp_gets(A, "mid", ""))) {
     L.pending = false;
-    start_match(NET_HOST, mp_gets(A, "mid", ""), mp_gets(A, "from", ""), mp_gets(A, "n", "PLAYER"), mp_gets(A, "w", "pipe"));
+    start_match(NET_HOST, mp_gets(A, "mid", ""), mp_gets(A, "from", ""), mp_gets(A, "n", "PLAYER"), mp_gets(A, "w", "pipe"), ext_read(A));
   } else if (!strcmp(k, "no") && L.pending && !strcmp(L.pend_mid, mp_gets(A, "mid", ""))) {
     L.pending = false;
     snprintf(ui_online.status, sizeof ui_online.status, "%s", mp_truthy(mp_get(A, "busy")) ? "BUSY" : "DECLINED");
@@ -172,7 +212,7 @@ static void on_m_ctl(const mp_val *g, const char *a, void *c) {
   if (g && strcmp(mp_gets(g, "src", ""), L.id)) { L.last_in = now_ms(); game_on_ctl(g); }
 }
 
-static void start_match(int role, const char *mid, const char *opp_id, const char *opp_n, const char *opp_w) {
+static void start_match(int role, const char *mid, const char *opp_id, const char *opp_n, const char *opp_w, ext_t opp_x) {
   L.busy = true; beat();
   L.in_match = true; L.role = role; L.closed = false; L.last_in = now_ms();
   snprintf(L.mid, 16, "%s", mid); snprintf(L.opp_id, 16, "%s", opp_id); snprintf(L.opp_n, 16, "%s", opp_n); snprintf(L.opp_w, 12, "%s", opp_w);
@@ -182,7 +222,20 @@ static void start_match(int role, const char *mid, const char *opp_id, const cha
   snprintf(p, sizeof p, CS "/m/%s/c", mid); L.msubs[2] = clasp_sub(p, on_m_ctl, NULL);
   /* fv.onMatch */
   ui_online.challenge = false;
-  game_begin_online(role, L.name, L.weapon, opp_n, opp_w);
+  /* two carts: each its own picks on the challenger's (the host's) stage; else the page's match */
+  online_pick me, them;
+  if (opp_x.v >= WIRE_V) {
+    snprintf(me.fighter, 12, "%s", L.fighter); snprintf(me.weapon, 12, "%s", L.weapon);
+    snprintf(them.fighter, 12, "%s", opp_x.c); snprintf(them.weapon, 12, "%s", opp_x.w);
+    const char *g = role == NET_HOST ? L.stage : opp_x.g;
+    snprintf(me.stage, 12, "%s", stage_index(g) >= 0 ? g : "workshop"); snprintf(them.stage, 12, "%s", me.stage);
+  } else {
+    snprintf(me.fighter, 12, "%s", role == NET_HOST ? "moheeb" : "luis"); snprintf(me.weapon, 12, "%s", web_weapon());
+    snprintf(them.fighter, 12, "%s", role == NET_HOST ? "luis" : "moheeb");
+    snprintf(them.weapon, 12, "%s", weapon_index(opp_w) >= 0 && WEAPONS[weapon_index(opp_w)].web ? opp_w : "pipe");
+    snprintf(me.stage, 12, "workshop"); snprintf(them.stage, 12, "workshop");
+  }
+  game_begin_online(role, L.name, &me, opp_n, &them);
 }
 
 bool online_in_match(void) { return L.in_match; }
@@ -265,6 +318,7 @@ static void fire_peers(void) {
   for (int i = 0; i < ui_online.npeers; i++) {
     snprintf(ui_online.peers[i].id, 16, "%s", L.peers[i].id); snprintf(ui_online.peers[i].n, 16, "%s", L.peers[i].n);
     snprintf(ui_online.peers[i].w, 12, "%s", L.peers[i].w); ui_online.peers[i].busy = L.peers[i].s != 0;
+    snprintf(ui_online.peers[i].c, 12, "%s", L.peers[i].c); ui_online.peers[i].v = L.peers[i].v;
   }
 }
 
@@ -301,30 +355,35 @@ void online_copy_pad(void) { ui_toast("PRESS CTRL C"); }
 void online_accept(void) {
   if (!L.chal) return;
   L.chal = false; ui_online.challenge = false;
-  mp_val *m = mp_map(); mp_set(m, "k", mp_str("ok")); mp_set(m, "from", mp_str(L.id)); mp_set(m, "n", mp_str(L.name));
-  mp_set(m, "w", mp_str(L.weapon)); mp_set(m, "mid", mp_str(L.ch_mid));
-  inbox_send(L.ch_from, m);
-  start_match(NET_GUEST, L.ch_mid, L.ch_from, L.ch_n, L.ch_w);
+  inbox_send(L.ch_from, msg("ok", L.ch_mid));
+  start_match(NET_GUEST, L.ch_mid, L.ch_from, L.ch_n, L.ch_w, L.ch_x);
 }
 void online_decline(void) {
   if (!L.chal) return;
   L.chal = false; ui_online.challenge = false;
-  mp_val *m = mp_map(); mp_set(m, "k", mp_str("no")); mp_set(m, "from", mp_str(L.id)); mp_set(m, "n", mp_str(L.name));
-  mp_set(m, "w", mp_str(L.weapon)); mp_set(m, "mid", mp_str(L.ch_mid));
-  inbox_send(L.ch_from, m);
+  inbox_send(L.ch_from, msg("no", L.ch_mid));
 }
 static void challenge(const char *A) {
   char P[16]; q8(P); q8(P + 6); P[12] = 0;
   L.pending = true; snprintf(L.pend_to, 16, "%s", A); snprintf(L.pend_mid, 16, "%s", P); L.pend_at = now_ms();
-  mp_val *m = mp_map(); mp_set(m, "k", mp_str("ch")); mp_set(m, "from", mp_str(L.id)); mp_set(m, "n", mp_str(L.name));
-  mp_set(m, "w", mp_str(L.weapon)); mp_set(m, "mid", mp_str(P));
-  inbox_send(A, m);
+  inbox_send(A, msg("ch", P));
   status("CHALLENGE SENT. WAITING FOR AN ANSWER.");
 }
 static void ui_weapon(const char *w) {
   if (weapon_index(w) < 0) return;
   snprintf(L.weapon, sizeof L.weapon, "%s", w); snprintf(ui_online.weapon, sizeof ui_online.weapon, "%s", w);
-  ck_save_set("ck_weapon", w);
+  if (WEAPONS[weapon_index(w)].web) ck_save_set("ck_weapon", w);
+  beat();
+}
+static void ui_fighter(const char *c) {
+  int r = roster_index(c);
+  if (r < 0) return;
+  snprintf(L.fighter, sizeof L.fighter, "%s", c); snprintf(ui_online.fighter, sizeof ui_online.fighter, "%s", c);
+  ui_weapon(ROSTER[r].weapon);
+}
+static void ui_stage(const char *g) {
+  if (stage_index(g) < 0) return;
+  snprintf(L.stage, sizeof L.stage, "%s", g); snprintf(ui_online.stage, sizeof ui_online.stage, "%s", g);
   beat();
 }
 void online_open_pads(void) {
@@ -353,9 +412,11 @@ void online_init(void) {
   snprintf(L.weapon, sizeof L.weapon, "%s", ck_save_get("ck_weapon", "pipe"));
   if (weapon_index(L.weapon) < 0) snprintf(L.weapon, sizeof L.weapon, "pipe");
   snprintf(ui_online.weapon, sizeof ui_online.weapon, "%s", L.weapon);
+  snprintf(L.fighter, sizeof L.fighter, "moheeb"); snprintf(ui_online.fighter, sizeof ui_online.fighter, "moheeb");
+  snprintf(L.stage, sizeof L.stage, "workshop"); snprintf(ui_online.stage, sizeof ui_online.stage, "workshop");
   snprintf(ui_online.name, sizeof ui_online.name, "%s", ck_save_get("ck_name", ""));
   ui_online.room[0] = 0;
-  ui_on_olweapon = ui_weapon;
+  ui_on_olweapon = ui_weapon; ui_on_olfighter = ui_fighter; ui_on_olstage = ui_stage;
   ui_on_challenge = challenge;
   ui_on_room_enter = online_join;
 }

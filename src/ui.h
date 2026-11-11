@@ -22,10 +22,14 @@ typedef struct {
 
 /* the callbacks the app sets (A.cb) */
 typedef struct {
-  void (*act)(const char *act);            /* data-act: "1p" "2p" "online" "start" "back" "resume" ... */
+  void (*act)(const char *act);            /* data-act: "1p" "2p" "online" "start" "back" "resume" ...;
+                                            * this cart's: "tourney" "stage" "stageback" "tstart" "tplay"
+                                            * "tskip" "tquit" "tnew" */
   void (*weapon)(int slot, const char *w);
   void (*swap)(void);
   void (*diff)(int level);
+  void (*fighter)(int slot, const char *key);
+  void (*stage)(int stage);
 } ui_callbacks;
 extern ui_callbacks ui_cb;
 
@@ -44,6 +48,10 @@ void ui_key(int code);
 void ui_pointer(float x, float y, bool pressed);
 
 void ui_set_select(ck_sel *sel, int mode);
+/* the tourney the setup, bracket and champion screens show (tourney.h) */
+void ui_set_tourney(void *tourney);
+/* repaint whichever of this cart's menu screens is up (after the game changed what it shows) */
+void ui_menus_changed(void);
 void ui_render_select(void);
 void ui_set_names(const char *n0, const char *n1, const char *pn0, const char *pn1);  /* pn NULL: leave P1 / P2 */
 void ui_set_health(int i, float pct, bool instant);
@@ -70,14 +78,17 @@ typedef struct {
   char name[16], room[20], link[160], status[160];
   bool link_row;                   /* #ol-linkrow shown */
   char weapon[12];                 /* the weapon chips, the one that is on */
+  char fighter[12], stage[12];     /* this cart's picks (cart against cart only) */
   int npeers;
-  struct { char id[16], n[16], w[12]; bool busy; } peers[16];
+  struct { char id[16], n[16], w[12], c[12]; int v; bool busy; } peers[16];   /* c, v: a cart's fighter and wire version */
   bool challenge; char chtxt[48];  /* #ol-ch */
   int focus;                       /* 0 none, 1 name, 2 room */
 } ui_online_t;
 extern ui_online_t ui_online;
 /* online.c's callbacks: a weapon chip, a CHALLENGE button, ENTER in the room field */
 extern void (*ui_on_olweapon)(const char *w);
+extern void (*ui_on_olfighter)(const char *key);
+extern void (*ui_on_olstage)(const char *key);
 extern void (*ui_on_challenge)(const char *peer_id);
 extern void (*ui_on_room_enter)(void);
 

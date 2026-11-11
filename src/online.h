@@ -39,8 +39,11 @@ void online_ctl(mp_val *ctl);
 double online_idle_ms(void);
 void online_end_match(void);
 
+/* a side of an online match: fighter, weapon and stage keys */
+typedef struct { char fighter[12], weapon[12], stage[12]; } online_pick;
+
 /* the game's handlers (game.c) */
-void game_begin_online(int role, const char *my_name, const char *my_weapon, const char *opp_name, const char *opp_weapon);
+void game_begin_online(int role, const char *my_name, const online_pick *me, const char *opp_name, const online_pick *opp);
 void game_on_snap(const mp_val *snap);
 void game_on_intent(const mp_val *intent);
 void game_on_ctl(const mp_val *ctl);

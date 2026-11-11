@@ -10,6 +10,7 @@
 #include "weapons.h"
 #include "kh/kfx.h"
 #include "special.h"
+#include "tourney.h"
 #include "gfx.h"
 #include "fx.h"
 #include "ui.h"
@@ -70,6 +71,8 @@ static struct {
   bool rematch_asked;
   double idle_ms;
   char screen_before_controls[16];   /* D of the page's act switch */
+  /* the tourney: the bracket, and whether the match on now is one of its matches */
+  tourney_t T; bool T_ready, in_tourney;
 } G;
 
 static fighter *other(int i) { return G.f[1 - i]; }
@@ -257,8 +260,10 @@ static void end_round(int A) {
   G.match_over = G.wins[0] >= RT || G.wins[1] >= RT;
 }
 
+static void tourney_after_match(void);
 static void finish_match(void) {
   bool A = G.wins[0] >= RT, P = G.wins[1] >= RT;
+  if (G.in_tourney && A != P) { tourney_after_match(); return; }
   if (A && P) gui_set_end("DRAW", false, "NOBODY WINS. EVERYBODY BLEEDS.");
   else {
     int D = A ? 0 : 1;
@@ -527,7 +532,8 @@ static void phase_logic(float A) {
     case PH_BETWEEN:
       if (G.phase_t > 2.6f) {
         gui_clear_announce();
-        if (G.match_over) finish_match();
+        if (G.match_over && G.in_tourney && G.wins[0] == G.wins[1]) { G.match_over = false; G.round++; start_round(); gui_toast("SUDDEN DEATH"); }
+        else if (G.match_over) finish_match();
         else if (G.dance_on && G.net_role != NET_GUEST && humans() > 0) start_dance();
         else { G.round++; start_round(); }
       }
@@ -569,12 +575,18 @@ static void update_camera(float A) {
     G.menu_orbit += A * 0.12f;
     const char *scr = ui_screen();
     bool v = scr && !strcmp(scr, "s-select");
-    float o = v ? 6.6f : 7.4f, B = v ? 1.7f : 1.9f, z = G.menu_orbit * (v ? 0.35f : 1);
-    w = (v3){sinf(z) * o * 0.9f, B, cosf(z) * o};
-    float a = v ? 0 : -1.9f;
-    v3 c = {cosf(z), 0, -sinf(z)};
-    g = (v3){-c.x * a, (v ? 0.55f : 1.25f) - c.y * a, -c.z * a};
-    if (v) { w = (v3){sinf(z) * 5.6f, 1.5f, cosf(z) * 5.6f + 0.6f}; g = (v3){0, 0.35f, 0}; }
+    if (scr && !strcmp(scr, "s-champ")) {   /* the champion, to the left of the card */
+      float z = G.menu_orbit * 0.25f;
+      w = (v3){sinf(z) * 3.6f - 1.4f, 1.35f, cosf(z) * 3.6f + 0.4f}; g = (v3){0.95f, 1.0f, 0};
+      clip = false;
+    } else {
+      float o = v ? 6.6f : 7.4f, B = v ? 1.7f : 1.9f, z = G.menu_orbit * (v ? 0.35f : 1);
+      w = (v3){sinf(z) * o * 0.9f, B, cosf(z) * o};
+      float a = v ? 0 : -1.9f;
+      v3 c = {cosf(z), 0, -sinf(z)};
+      g = (v3){-c.x * a, (v ? 0.55f : 1.25f) - c.y * a, -c.z * a};
+      if (v) { w = (v3){sinf(z) * 5.6f, 1.5f, cosf(z) * 5.6f + 0.6f}; g = (v3){0, 0.12f, 0}; }
+    }
   } else if (G.phase == PH_DANCE) {
     w = (v3){0, 1.5f, 5.7f}; g = (v3){0, 1.1f, 0};
   } else {
@@ -767,6 +779,12 @@ static mp_val *snapshot(void) {
   mp_set(s, "sl", mp_num(r2(G.slow)));
   mp_set(s, "ds", mp_num(G.phase == PH_DANCE ? G.dance_seed : 0));
   mp_set(s, "f", f);
+  /* a cinematic EXTREME (carts only: the page's weapons never throw one): who, which, how far in */
+  if (special_active()) {
+    mp_val *sp = mp_arr();
+    mp_push(sp, mp_num(special_attacker() == G.f[0] ? 0 : 1)); mp_push(sp, mp_num(special_kind())); mp_push(sp, mp_num(r3(special_time())));
+    mp_set(s, "sp", sp);
+  }
   mp_val *ev = mp_arr();
   for (int i = 0; i < G.nev; i++) mp_push(ev, mp_clone(G.evbuf[i].e));
   mp_set(s, "ev", ev);
@@ -882,6 +900,11 @@ static void step_guest(float A) {
   G.time_left = (float)mp_getn(P, "tl", 0);
   if (G.phase == PH_FIGHT) ui_set_timer(G.time_left);
   float D = 1 - expf(-A * 22), wt = (float)((ck_now() * 1000 - G.snap_at) / 1000);
+  const mp_val *sp = mp_get(P, "sp");
+  if (sp && sp->t == MP_ARR && sp->count >= 3) {
+    int who = (int)mp_at(sp, 0)->n & 1;
+    special_follow(G.f[who], G.f[1 - who], (int)mp_at(sp, 1)->n, (float)mp_at(sp, 2)->n + wt);
+  } else if (special_active()) special_stop();
   const mp_val *f = mp_get(P, "f");
   for (int i = 0; i < 2; i++) {
     fighter *g = G.f[i];
@@ -931,7 +954,7 @@ void game_on_ctl(const mp_val *A) {
 
 static void dance_net_send(mp_val *m) { online_ctl(m); }
 
-void game_begin_online(int role, const char *my_name, const char *my_weapon, const char *opp_name, const char *opp_weapon) {
+void game_begin_online(int role, const char *my_name, const online_pick *me, const char *opp_name, const online_pick *opp) {
   G.sel_backup = G.sel; G.has_backup = true;
   G.net_role = role; G.mode = 1; input_mode = 1;
   G.has_remote = false;
@@ -940,15 +963,18 @@ void game_begin_online(int role, const char *my_name, const char *my_weapon, con
   for (int i = 0; i < G.nev; i++) mp_free(G.evbuf[i].e);
   G.nev = 0;
   bool t = role == NET_HOST;
-  snprintf(G.sel.slots[0].ch, 12, "moheeb"); snprintf(G.sel.slots[0].weapon, 12, "%s", t ? my_weapon : opp_weapon);
-  snprintf(G.sel.slots[1].ch, 12, "luis"); snprintf(G.sel.slots[1].weapon, 12, "%s", t ? opp_weapon : my_weapon);
-  G.cpu[0] = G.cpu[1] = false;
-  use_stage(0);
+  /* the host is always on the left (the page's convention: slot 0 is the host) */
+  const online_pick *L0 = t ? me : opp, *L1 = t ? opp : me;
+  snprintf(G.sel.slots[0].ch, 12, "%s", L0->fighter); snprintf(G.sel.slots[0].weapon, 12, "%s", L0->weapon);
+  snprintf(G.sel.slots[1].ch, 12, "%s", L1->fighter); snprintf(G.sel.slots[1].weapon, 12, "%s", L1->weapon);
+  G.cpu[0] = G.cpu[1] = false; G.in_tourney = false;
+  int st = stage_index(me->stage); if (st < 0) st = 0;
   G.has_online_names = true;
   snprintf(G.online_names[0], 16, "%s", t ? my_name : opp_name);
   snprintf(G.online_names[1], 16, "%s", t ? opp_name : my_name);
   G.has_brain[0] = G.has_brain[1] = false; G.paused = false;
   memset(G.guest_counts, 0, sizeof G.guest_counts); G.int_timer = 0;
+  use_stage(st);
   apply_sel();
   ui_hide_all(); ui_hud(true);
   if (t) { music_set_level(1); start_match(); }
@@ -964,11 +990,79 @@ void game_leave_online(const char *A) {
   if (dance_active()) dance_cancel();
   music_set_level(0.35f);
   online_end_match();
+  special_stop();
+  use_stage(0);
   if (G.has_backup) { G.sel = G.sel_backup; G.has_backup = false; apply_sel(); }
   menu_mode();
   /* P.onLeave: the HUD off and the online screen open, with the reason */
   ui_hud(false);
   online_leave_room_status(A);
+}
+
+/* ---------------------------------------------------------------- the tourney */
+
+static void show_both(void) { for (int t = 0; t < 2; t++) if (G.f[t]) body_visible(G.f[t]->body, true); }
+static const char *entrant_label(int e, char *buf, int cap) {
+  if (G.T.e[e].ctl != TC_PLAYER) return "CPU";
+  int k = 1; for (int j = 0; j < e; j++) k += G.T.e[j].ctl == TC_PLAYER;
+  snprintf(buf, cap, "P%d", k); return buf;
+}
+/* the next match of the bracket onto the two sides, then the usual way into a match */
+static void tourney_play(void) {
+  tourney_t *T = &G.T;
+  if (T->cur < 0) return;
+  const t_match *M = &T->m[T->cur];
+  const t_entrant *A = &T->e[M->a], *B = &T->e[M->b];
+  snprintf(G.sel.slots[0].ch, 12, "%s", ROSTER[A->fighter].key); snprintf(G.sel.slots[0].weapon, 12, "%s", WEAPONS[A->weapon].key);
+  snprintf(G.sel.slots[1].ch, 12, "%s", ROSTER[B->fighter].key); snprintf(G.sel.slots[1].weapon, 12, "%s", WEAPONS[B->weapon].key);
+  char la[8], lb[8];
+  set_sides(A->ctl != TC_PLAYER, A->ctl - 1, entrant_label(M->a, la, sizeof la), B->ctl != TC_PLAYER, B->ctl - 1, entrant_label(M->b, lb, sizeof lb));
+  G.sel.stage = tourney_stage_of(T, T->cur, STAGE_N);
+  G.in_tourney = true;
+  apply_sel();
+  go_match();
+}
+/* the champion alone in the middle of the stage, celebrating */
+static void tourney_champion(void) {
+  tourney_t *T = &G.T;
+  const t_entrant *C = &T->e[T->champion];
+  snprintf(G.sel.slots[0].ch, 12, "%s", ROSTER[C->fighter].key); snprintf(G.sel.slots[0].weapon, 12, "%s", WEAPONS[C->weapon].key);
+  apply_sel();
+  G.phase = PH_MENU; gui_hud(false); gui_set_hint("");
+  fighter *f = G.f[0];
+  fighter_reset(f);
+  t3_object_set_position(f->root, 0, 0, 0); f->yaw = 0.35f; t3_object_set_rotation(f->root, 0, f->yaw, 0);
+  body_teleport(f->body);
+  fighter_victory(f);
+  if (G.f[1]) body_visible(G.f[1]->body, false);
+  G.cam_snap = true;
+  ui_show("s-champ"); sfx_win(); music_set_level(0.6f);
+}
+static void tourney_after_match(void) {
+  int side = G.wins[0] >= RT ? 0 : 1;
+  tourney_report(&G.T, side, G.wins[0], G.wins[1]);
+  G.in_tourney = false;
+  gui_clear_announce(); gui_hud(false);
+  if (G.T.cur < 0) { tourney_champion(); return; }
+  G.phase = PH_MATCHEND;
+  ui_show("s-bracket");
+}
+static bool tourney_act(const char *v) {
+  if (!strcmp(v, "tourney")) {
+    if (!G.T_ready) { tourney_defaults(&G.T, 8); tourney_shuffle_cpus(&G.T); G.T_ready = true; }
+    G.T.started = false;
+    ui_set_tourney(&G.T); ui_show("s-tsetup");
+  } else if (!strcmp(v, "tstart")) {
+    tourney_start(&G.T, (uint32_t)(ck_rand() * 4294967295.0));
+    ui_show("s-bracket");
+  } else if (!strcmp(v, "tplay")) tourney_play();
+  else if (!strcmp(v, "tskip")) {
+    tourney_sim(&G.T);
+    if (G.T.cur < 0) tourney_champion(); else ui_menus_changed();
+  } else if (!strcmp(v, "tquit")) { G.in_tourney = false; G.T.started = false; G.paused = false; special_stop(); use_stage(0); menu_mode(); show_both(); ui_show("s-title"); }
+  else if (!strcmp(v, "tnew")) { G.T.started = false; G.in_tourney = false; use_stage(0); menu_mode(); show_both(); ui_show("s-tsetup"); }
+  else return false;
+  return true;
 }
 
 /* ---------------------------------------------------------------- the app (the page's main) */
@@ -995,17 +1089,33 @@ static void act(const char *v) {
     const char *s = ui_screen();
     if (s && !strcmp(s, "s-controls")) ui_show(G.screen_before_controls); else ui_show("s-title");
   } else if (!strcmp(v, "start")) go_match();
+  else if (!strcmp(v, "stage")) { if (!stage_needs_load(G.sel.stage)) use_stage(G.sel.stage); ui_show("s-stage"); }
+  else if (!strcmp(v, "stageback")) ui_show("s-select");
+  else if (!strncmp(v, "t", 1) && tourney_act(v)) {}
   else if (!strcmp(v, "resume")) toggle_pause();
-  else if (!strcmp(v, "quit")) { G.paused = false; use_stage(0); menu_mode(); ui_show("s-title"); }
+  else if (!strcmp(v, "quit")) { G.paused = false; G.in_tourney = false; special_stop(); use_stage(0); menu_mode(); show_both(); ui_show("s-title"); }
   else if (!strcmp(v, "rematch")) {
     if (G.net_role == NET_GUEST) { mp_val *c = mp_map(); mp_set(c, "k", mp_str("rm")); online_ctl(c); ui_toast("REMATCH REQUESTED"); }
     else start_match();
   } else if (!strcmp(v, "again")) {
     if (G.net_role) { game_leave_online(""); return; }
-    G.paused = false; menu_mode(); ui_set_select(&G.sel, G.mode); ui_show("s-select");
+    G.paused = false; special_stop(); menu_mode(); ui_set_select(&G.sel, G.mode); ui_show("s-select");
   }
 }
 static void cb_weapon(int p, const char *w) { snprintf(G.sel.slots[p].weapon, 12, "%s", w); apply_sel(); }
+/* a new fighter in a slot comes with its own weapon */
+static void cb_fighter(int p, const char *key) {
+  int ri = roster_index(key); if (ri < 0) return;
+  snprintf(G.sel.slots[p].ch, 12, "%s", key);
+  snprintf(G.sel.slots[p].weapon, 12, "%s", ROSTER[ri].weapon);
+  apply_sel();
+}
+/* the stage screen shows the stage it is on when that needs no loading */
+static void cb_stage(int st) {
+  G.sel.stage = st;
+  if (!stage_needs_load(st)) use_stage(st);
+  ui_menus_changed();
+}
 static void cb_swap(void) {
   char a[12]; snprintf(a, sizeof a, "%s", G.sel.slots[0].ch);
   snprintf(G.sel.slots[0].ch, 12, "%s", G.sel.slots[1].ch); snprintf(G.sel.slots[1].ch, 12, "%s", a);
@@ -1077,6 +1187,7 @@ void game_init(void) {
 #endif
   fx_init(); gfx_init(); ui_init(); dance_init(); online_init();
   ui_cb.act = act; ui_cb.weapon = cb_weapon; ui_cb.swap = cb_swap; ui_cb.diff = cb_diff;
+  ui_cb.fighter = cb_fighter; ui_cb.stage = cb_stage;
   sfx_tap = sfx_tapped;
   special_on_blow = special_blow;
   stage_init(CK_R);

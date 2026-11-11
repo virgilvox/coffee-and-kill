@@ -8,6 +8,10 @@
  * same rules (margins collapse, flex rows centre, line boxes as in ui_int.h);
  * the numbers in comments are Chrome's for the same content. */
 #include "ui_int.h"
+#include "ui_kit.h"
+#include "weapons.h"
+#include "roster.h"
+#include "stage.h"
 #include "ck.h"
 #include "audio.h"
 #include "input.h"
@@ -27,15 +31,13 @@ const char *scr_cur;
 ck_sel *scr_sel; int scr_mode = 1;
 int scr_menu_idx, scr_sel_focus = 3;
 /* :focus-visible: the online and pads screens' focus ring shows once the keyboard moved the focus */
-static bool kbd_nav;
+bool kbd_nav;
 
-/* a canvas covering only part of the page: its page origin, set as the canvas transform */
-typedef struct { layer L; int ox, oy; } rlayer;
-static void R_begin(rlayer *r, int x, int y, int w, int h) {
+void R_begin(rlayer *r, int x, int y, int w, int h) {
   L_ensure(&r->L, w, h); r->ox = x; r->oy = y;
   cv_set_transform(r->L.c, 1, 0, 0, 1, (float)-x, (float)-y);
 }
-static void R_draw(rlayer *r) { if (!r->L.c) return; L_upload(&r->L); ov_draw(r->L.t, (float)r->ox, (float)r->oy, 1); }
+void R_draw(rlayer *r) { if (!r->L.c) return; L_upload(&r->L); ov_draw(r->L.t, (float)r->ox, (float)r->oy, 1); }
 
 static void draw_ops(cv *c, const uiop *ops, int n, float ox, float oy) {
   for (int i = 0; i < n; i++) {
@@ -61,13 +63,6 @@ static void draw_ops(cv *c, const uiop *ops, int n, float ox, float oy) {
  * translate(-3,-3), 9 9 ink); .ghost (cream, ink, 5 5 ink; selected: yellow,
  * translate(-3,-3), the shadow stays 5 5 ink); .go (pink, ink, 7 7 ink; selected:
  * translate(-3,-3)). transition: transform, box-shadow, background, color .08s */
-enum { BTN_NORMAL, BTN_GHOST, BTN_GO };
-typedef struct {
-  float x, y, w, h, fs, padx, pady; int kind; bool center;
-  char label[40]; char act[16];
-  bool sel; trans_t t; float painted; layer L;
-} btn_t;
-
 static void btn_style(const btn_t *b, float s, col_t *bg, col_t *fg, float *sh, col_t *sc, float *tr) {
   if (b->kind == BTN_GHOST) {
     *bg = col_mix(COL(C_CREAM), COL(C_PINK), s); *fg = COL(C_INK); *sh = 5; *sc = COL(C_INK);
@@ -79,19 +74,19 @@ static void btn_style(const btn_t *b, float s, col_t *bg, col_t *fg, float *sh, 
   }
   *tr = -3 * s;
 }
-static void btn_init(btn_t *b, float x, float y, float w, float h, float fs, float padx, float pady, int kind, const char *label, const char *act) {
+void btn_init(btn_t *b, float x, float y, float w, float h, float fs, float padx, float pady, int kind, const char *label, const char *act) {
   memset(b, 0, sizeof *b);
   b->x = x; b->y = y; b->w = w; b->h = h; b->fs = fs; b->padx = padx; b->pady = pady; b->kind = kind;
   b->center = kind == BTN_GO;
   snprintf(b->label, sizeof b->label, "%s", label); snprintf(b->act, sizeof b->act, "%s", act);
   tr_jump(&b->t, 0); b->painted = -1;
 }
-static void btn_set_sel(btn_t *b, bool sel) {
+void btn_set_sel(btn_t *b, bool sel) {
   if (sel == b->sel) return;
   b->sel = sel; tr_set(&b->t, sel ? 1 : 0, ui_now, 0.08f, 0);
 }
 /* paint into c at the button's place (for screens painted whole) */
-static void btn_paint_at(cv *c, const btn_t *b, float s, float ox, float oy) {
+void btn_paint_at(cv *c, const btn_t *b, float s, float ox, float oy) {
   col_t bg, fg, sc; float sh, tr;
   btn_style(b, s, &bg, &fg, &sh, &sc, &tr);
   float x = b->x + tr - ox, y = b->y + tr - oy;
@@ -101,7 +96,7 @@ static void btn_paint_at(cv *c, const btn_t *b, float s, float ox, float oy) {
   if (b->center) tx = x + (b->w - t_width(F_MARKER, b->fs, ls, b->label)) / 2;
   t_draw(c, F_MARKER, b->fs, ls, tx, y + 4 + b->pady + t_asc(F_MARKER, b->fs), b->label, fg);
 }
-static void btn_draw(btn_t *b) {
+void btn_draw(btn_t *b) {
   float s = tr_get(&b->t, ui_now);
   if (s != b->painted) {
     L_ensure(&b->L, (int)ceilf(b->w) + 20, (int)ceilf(b->h) + 20);
@@ -111,14 +106,12 @@ static void btn_draw(btn_t *b) {
   L_upload(&b->L);
   ov_draw(b->L.t, b->x - 6, b->y - 6, 1);
 }
-static bool btn_hit(const btn_t *b, float x, float y) { return x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h; }
+bool btn_hit(const btn_t *b, float x, float y) { return x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h; }
 
 /* ================================================================== hit rects */
 
-typedef struct { float x, y, w, h; int kind; int a, b; char s[20]; } hit_t;
-enum { H_ACT, H_WEAPON, H_SWAP, H_DIFF, H_FIELD, H_OLW, H_CH };
-static hit_t hits[64]; static int nhits;
-static void hit_add(float x, float y, float w, float h, int kind, int a, int b, const char *s) {
+hit_t hits[64]; int nhits;
+void hit_add(float x, float y, float w, float h, int kind, int a, int b, const char *s) {
   if (nhits >= 64) return;
   hit_t *t = &hits[nhits++]; t->x = x; t->y = y; t->w = w; t->h = h; t->kind = kind; t->a = a; t->b = b;
   snprintf(t->s, sizeof t->s, "%s", s ? s : "");
@@ -137,19 +130,19 @@ static void shades_init(void) {
   cv_fill_stop(shade_v.c, 0, "rgba(10,10,10,0.85)"); cv_fill_stop(shade_v.c, 0.6f, "rgba(10,10,10,0)");
   cv_fill_rect(shade_v.c, 0, 0, 1, CK_H);
 }
-static void draw_shade_h(void) { L_upload(&shade_h); float m[6] = {1, 0, 0, CK_H, 0, 0}; ov_draw_m(shade_h.t, m, 1, 1); }
-static void draw_shade_v(void) { L_upload(&shade_v); float m[6] = {CK_W, 0, 0, 1, 0, 0}; ov_draw_m(shade_v.t, m, 1, 1); }
+void draw_shade_h(void) { L_upload(&shade_h); float m[6] = {1, 0, 0, CK_H, 0, 0}; ov_draw_m(shade_h.t, m, 1, 1); }
+void draw_shade_v(void) { L_upload(&shade_v); float m[6] = {CK_W, 0, 0, 1, 0, 0}; ov_draw_m(shade_v.t, m, 1, 1); }
 
 /* .chip: type 14, ls .16em, border 3, padding 5 10, paper / .on ink with cream text */
-static float chip_w(const char *s) { return t_width(F_TYPE, 14, 2.24f, s) + 26; }
-static void chip_paint(cv *c, float x, float y, const char *s, bool on) {
+float chip_w(const char *s) { return t_width(F_TYPE, 14, 2.24f, s) + 26; }
+void chip_paint(cv *c, float x, float y, const char *s, bool on) {
   float w = chip_w(s);
   c_box(c, x, y, w, 34, on ? COL(C_INK) : COL(C_PAPER), 3, COL(C_INK), 0, 0, COL(0));
   t_draw(c, F_TYPE, 14, 2.24f, x + 13, t_base(F_TYPE, 14, y + 8, 18), s, on ? COL(C_CREAM) : COL(C_INK));
 }
 /* .lab: type 13, ls .2em */
-static void lab_paint(cv *c, float x, float top, const char *s) { t_draw(c, F_TYPE, 13, 2.6f, x, top + t_asc(F_TYPE, 13), s, COL(C_INK)); }
-static void focus_ring(cv *c, float x, float y, float w, float h) {   /* outline: 3px dashed pink, offset 2 */
+void lab_paint(cv *c, float x, float top, const char *s) { t_draw(c, F_TYPE, 13, 2.6f, x, top + t_asc(F_TYPE, 13), s, COL(C_INK)); }
+void focus_ring(cv *c, float x, float y, float w, float h) {   /* outline: 3px dashed pink, offset 2 */
   c_dash_rect(c, x - 5, y - 5, w + 10, h + 10, 3, COL(C_PINK));
 }
 
@@ -185,15 +178,16 @@ static void load_draw(void) {
 
 /* ================================================================== title */
 static layer title_L;
-static btn_t title_b[5];
+static btn_t title_b[6];
 static void title_init(void) {
   /* the menu, after .wrap's translateY(-52%) (-277.55) */
   float y0 = 673.75f - 277.55f;
   btn_init(&title_b[0], 76.8f, y0, 430, 48, 25.92f, 16, 6, BTN_NORMAL, "1 PLAYER", "1p");
   btn_init(&title_b[1], 76.8f, y0 + 58, 430, 48, 25.92f, 16, 6, BTN_NORMAL, "2 PLAYERS", "2p");
-  btn_init(&title_b[2], 76.8f, y0 + 116, 430, 48, 25.92f, 16, 6, BTN_NORMAL, "ONLINE", "online");
-  btn_init(&title_b[3], 76.8f, y0 + 174, 208, 46, 24, 12, 6, BTN_GHOST, "PHONE PADS", "pads");
-  btn_init(&title_b[4], 298.8f, y0 + 174, 208, 46, 24, 12, 6, BTN_GHOST, "CONTROLS", "controls");
+  btn_init(&title_b[2], 76.8f, y0 + 116, 430, 48, 25.92f, 16, 6, BTN_NORMAL, "TOURNEY", "tourney");
+  btn_init(&title_b[3], 76.8f, y0 + 174, 430, 48, 25.92f, 16, 6, BTN_NORMAL, "ONLINE", "online");
+  btn_init(&title_b[4], 76.8f, y0 + 232, 208, 46, 24, 12, 6, BTN_GHOST, "PHONE PADS", "pads");
+  btn_init(&title_b[5], 298.8f, y0 + 232, 208, 46, 24, 12, 6, BTN_GHOST, "CONTROLS", "controls");
   L_ensure(&title_L, CK_W, CK_H);
   draw_ops(title_L.c, STATIC_TITLE, sizeof STATIC_TITLE / sizeof STATIC_TITLE[0], 0, 0);
 }
@@ -261,119 +255,7 @@ void scr_end_changed(const char *name, bool wins, const char *sub) {
 static layer controls_L;
 
 /* ================================================================== back button */
-static btn_t back_b;   /* .btn.ghost.back at (20, 20): BACK, marker 32, padding 8 22 6 */
-
-/* ================================================================== select */
-static const struct { const char *key, *name, *tag, *desc; float dmg, spd; } WEAP[4] = {
-  {"pipe", "PIPE WRENCH", "BALANCED", "Red steel. Solid on every count.", 1, 1},
-  {"spanner", "BIG SPANNER", "FAST", "Chrome combination wrench. Quick hands.", 0.82f, 1.22f},
-  {"sledge", "SLEDGE", "HEAVY", "Slow swing. Big dents.", 1.5f, 0.8f},
-  {"crowbar", "CROWBAR", "REACH", "Long and mean. Hooks in from range.", 1.1f, 0.95f},
-};
-static const char *LEVELS[3] = {"ROOKIE", "JOURNEYMAN", "EXTREME"};
-static int weap_index(const char *k) { for (int i = 0; i < 4; i++) if (!strcmp(WEAP[i].key, k)) return i; return 0; }
-static layer sel_head; static rlayer sel_R;   /* the head (once); the panel, painted on renderSelect */
-#define SEL_OX 0
-#define SEL_OY 0
-static int sel_rows(const char **rows) {
-  rows[0] = "w0"; rows[1] = "w1";
-  if (scr_mode == 1) { rows[2] = "diff"; rows[3] = "start"; return 4; }
-  rows[2] = "start"; return 3;
-}
-
-static void select_head_paint(void) {
-  /* .head: marker 51.2 (4vw), ls .02em, centred at top 18, shadows 5 5 pink and 2px ink */
-  static const tshadow SH_HEAD = {5, {{5, 5, COL(C_PINK)}, {-2, -2, COL(C_INK)}, {2, -2, COL(C_INK)}, {-2, 2, COL(C_INK)}, {2, 2, COL(C_INK)}}};
-  L_ensure(&sel_head, 640, 80);
-  cv *c = sel_head.c;
-  cv_set_transform(c, 1, 0, 0, 1, -320, 0);
-  float hw = t_width(F_MARKER, 51.2f, 1.024f, "PICK YOUR POISON");
-  t_draw_sh(c, F_MARKER, 51.2f, 1.024f, 640 - hw / 2, 18 + t_asc(F_MARKER, 51.2f), "PICK YOUR POISON", COL(C_CREAM), &SH_HEAD);
-}
-static void select_paint(void) {
-  nhits = 0;
-  if (!scr_sel) return;
-  const char *rows[4]; int nr = sel_rows(rows);
-  const char *e = rows[scr_sel_focus < nr ? scr_sel_focus : nr - 1];
-  /* the panel: 1120 wide, centred, bottom 18; two .pcard (551 each, gap 18) over the .selrow (64) */
-  float descH[2]; char dl[2][4][160]; int dn[2];
-  for (int g = 0; g < 2; g++) {
-    dn[g] = t_wrap(F_TYPE, 13, 0, WEAP[weap_index(scr_sel->slots[g].weapon)].desc, 511, false, dl[g], 4);
-    descH[g] = fmaxf(34, dn[g] * 13 * 1.35f);
-  }
-  float cardH = 18 + 43.52f + 10 + 106 + 9 + fmaxf(descH[0], descH[1]) + 16 + 4;   /* grid rows stretch to the taller */
-  float panelH = cardH + 18 + 64;
-  float top = CK_H - 18 - panelH, px = 80;
-  int ry0 = (int)floorf(top) - 12;
-  R_begin(&sel_R, 64, ry0, 1160, CK_H - ry0);
-  cv *c = sel_R.L.c;
-  for (int g = 0; g < 2; g++) {
-    float cx = px + g * (551 + 18), cy = top;
-    bool kf = !strcmp(e, g ? "w1" : "w0");
-    c_box(c, cx, cy, 551, cardH, COL(C_CREAM), 4, COL(C_INK), 8, 8, COL(g ? C_CYAN : C_PINK));
-    if (kf) c_dash_rect(c, cx - 9, cy - 9, 551 + 18, cardH + 18, 4, COL(C_PINK));   /* outline: 4px dashed, offset 5 */
-    float ix = cx + 20, iy = cy + 18;
-    /* .who */
-    char pl[8]; if (scr_mode == 1 && g == 1) strcpy(pl, "CPU"); else snprintf(pl, sizeof pl, "P%d", g + 1);
-    float plw = t_width(F_LCD, 24, 0, pl) + 16;
-    c_rect(c, ix, iy + 6.26f, plw, 31, COL(C_INK));
-    t_draw(c, F_LCD, 24, 0, ix + 8, iy + 6.26f + t_asc(F_LCD, 24), pl, COL(C_CREAM));
-    const char *fn = !strcmp(scr_sel->slots[g].ch, "luis") ? "LUIS" : "MOHEEB";
-    t_draw(c, F_MARKER, 43.52f, 0, ix + plw + 10, t_base(F_MARKER, 43.52f, iy, 43.52f), fn, COL(C_INK));
-    if (g == 0) {
-      const char *sw = "SWAP SIDES (TAB)";
-      float sww = t_width(F_TYPE, 13, 1.82f, sw) + 18 + 6;
-      float sx = ix + 511 - sww, sy = iy + 5.26f;
-      c_box(c, sx, sy, sww, 33, COL(C_INK), 3, COL(C_INK), 0, 0, COL(0));
-      t_draw(c, F_TYPE, 13, 1.82f, sx + 12, sy + 8 + t_asc(F_TYPE, 13), sw, COL(C_CREAM));
-      hit_add(sx, sy, sww, 33, H_SWAP, 0, 0, NULL);
-    }
-    /* .wgrid: 4 x 121.75, gap 8, at who + 10 */
-    float gy = iy + 43.52f + 10;
-    int on = weap_index(scr_sel->slots[g].weapon);
-    for (int w = 0; w < 4; w++) {
-      float bx = ix + w * (121.75f + 8), by = gy;
-      bool o = w == on;
-      if (o) { bx -= 2; by -= 2; c_rect(c, bx + 4, by + 4, 121.75f, 106, COL(C_INK)); }
-      c_rect(c, bx, by, 121.75f, 106, o ? COL(g ? C_CYAN : C_PINK) : COL(C_PAPER));
-      c_border(c, bx, by, 121.75f, 106, 3, COL(C_INK));
-      hit_add(ix + w * (121.75f + 8), gy, 121.75f, 106, H_WEAPON, g, w, NULL);
-      float tx = bx + 11, ty = by + 11;
-      char wl[3][160]; int nl = t_wrap(F_MARKER, 16, 0, WEAP[w].name, 99.75f, false, wl, 3);
-      for (int k = 0; k < nl; k++) t_draw(c, F_MARKER, 16, 0, tx, t_base(F_MARKER, 16, ty + k * 16.8f, 16.8f), wl[k], COL(C_INK));
-      float wty = ty + fmaxf(34, nl * 16.8f) + 4;
-      t_draw(c, F_TYPE, 11, 1.98f, tx, wty + t_asc(F_TYPE, 11), WEAP[w].tag, COLA(C_INK, 0.8f));
-      float sy = wty + 14 + 5;
-      for (int k = 0; k < 2; k++) {
-        const char *lab = k ? "SPD" : "DMG";
-        t_draw(c, F_TYPE, 10, 1, tx, sy + t_asc(F_TYPE, 10), lab, COL(C_INK));
-        float v = k ? WEAP[w].spd / 1.25f : WEAP[w].dmg / 1.5f;
-        c_rect(c, tx + t_width(F_TYPE, 10, 1, lab) + 5, sy + 3.5f, roundf(v * 46), 6, COL(C_INK));
-        sy += 13 + 2;
-      }
-    }
-    float dy = gy + 106 + 9;
-    for (int k = 0; k < dn[g]; k++) t_draw(c, F_TYPE, 13, 0, ix, t_base(F_TYPE, 13, dy + k * 13 * 1.35f, 13 * 1.35f), dl[g][k], COL(C_INK));
-  }
-  /* .selrow: the difficulty card (or the two player note) and START FIGHT */
-  float ry = top + cardH + 18;
-  bool kfd = !strcmp(e, "diff");
-  c_box(c, px, ry, 746, 64, COL(C_CREAM), 4, COL(C_INK), 8, 8, COL(C_PINK));
-  if (kfd) c_dash_rect(c, px - 9, ry - 9, 746 + 18, 64 + 18, 4, COL(C_PINK));
-  if (scr_mode == 1) {
-    lab_paint(c, px + 20, ry + 23.5f, "DIFFICULTY");
-    float cx = px + 20 + t_width(F_TYPE, 13, 2.6f, "DIFFICULTY") + 12;
-    for (int i = 0; i < 3; i++) {
-      chip_paint(c, cx, ry + 15, LEVELS[i], scr_sel->level == i);
-      hit_add(cx, ry + 15, chip_w(LEVELS[i]), 34, H_DIFF, i, 0, NULL);
-      cx += chip_w(LEVELS[i]) + 8;
-    }
-  } else lab_paint(c, px + 20, ry + 23.5f, "TWO PLAYERS ON ONE KEYBOARD. GAMEPADS WORK TOO.");
-  btn_t go; btn_init(&go, px + 746 + 14, ry, 360, 64, 38.4f, 22, 8, BTN_GO, "START FIGHT", "start");
-  btn_paint_at(c, &go, !strcmp(e, "start") ? 1 : 0, 0, 0);
-  hit_add(go.x, go.y, 360, 64, H_ACT, 0, 0, "start");
-}
-void scr_select_changed(void) { if (scr_cur && !strcmp(scr_cur, "s-select")) select_paint(); }
+btn_t back_b;   /* .btn.ghost.back at (20, 20): BACK, marker 32, padding 8 22 6 */
 
 /* ================================================================== online */
 static rlayer ol_R;
@@ -412,6 +294,8 @@ static void online_paint(void) {
   float y_r1 = y + 10; y = y_r1 + 41;
   float y_r2 = y + 8; y = y_r2 + 41;
   float y_r3 = y + 8; y = y_r3 + 34;
+  float y_r4 = y + 8; y = y_r4 + 34;
+  float y_r5 = y + 8; y = y_r5 + 34;
   float y_st = y + 10; y = y_st + sth;
   float y_lk = 0; float mb = 10;
   if (o->link_row) { y_lk = y + 10; y = y_lk + 41; mb = 8; }
@@ -444,14 +328,24 @@ static void online_paint(void) {
   chip_paint(c, bx, by, "MAIN LOBBY", false); ol_ctl[nol_ctl++] = (hit_t){bx, by, w1, 34, H_ACT, 0, 0, "ollobby"}; bx += w1 + 10;
   chip_paint(c, bx, by, "NEW ROOM", false); ol_ctl[nol_ctl++] = (hit_t){bx, by, w2, 34, H_ACT, 0, 0, "olnew"}; bx += w2 + 10;
   chip_paint(c, bx, by, "JOIN", true); ol_ctl[nol_ctl++] = (hit_t){bx, by, w3, 34, H_ACT, 0, 0, "oljoin"};
-  /* WEAPON chips (gap 6) */
-  lab_paint(c, cx, cy + y_r3 + 8.5f, "WEAPON");
-  bx = cx + t_width(F_TYPE, 13, 2.6f, "WEAPON") + 10;
-  for (int i = 0; i < 4; i++) {
-    float w = chip_w(WEAP[i].name);
-    chip_paint(c, bx, cy + y_r3, WEAP[i].name, !strcmp(o->weapon, WEAP[i].key));
-    ol_ctl[nol_ctl++] = (hit_t){bx, cy + y_r3, w, 34, H_OLW, i, 0, ""};
-    bx += w + 6;
+  /* FIGHTER, WEAPON, STAGE: a value between two chips that step it (the web page only sees the
+   * page's own: MOHEEB or LUIS, its four weapons, the workshop) */
+  {
+    int fi = roster_index(o->fighter), wi = weapon_index(o->weapon), si = stage_index(o->stage);
+    const char *val[3] = {fi >= 0 ? ROSTER[fi].name : "?", wi >= 0 ? WEAPONS[wi].name : "?", si >= 0 ? STAGES[si].name : "?"};
+    const char *lab[3] = {"FIGHTER", "WEAPON", "STAGE"};
+    float ry[3] = {y_r3, y_r4, y_r5}; int kind[3] = {H_OLF, H_OLW, H_OLS};
+    for (int k = 0; k < 3; k++) {
+      lab_paint(c, cx, cy + ry[k] + 8.5f, lab[k]);
+      float x = cx + 100;
+      chip_paint(c, x, cy + ry[k], "<", false); ol_ctl[nol_ctl++] = (hit_t){x, cy + ry[k], chip_w("<"), 34, kind[k], -1, 0, ""};
+      x += chip_w("<") + 10;
+      t_draw(c, F_MARKER, 20, 0, x, cy + ry[k] + 5 + t_asc(F_MARKER, 20), val[k], COL(C_INK));
+      x += t_width(F_MARKER, 20, 0, val[k]) + 10;
+      chip_paint(c, x, cy + ry[k], ">", false); ol_ctl[nol_ctl++] = (hit_t){x, cy + ry[k], chip_w(">"), 34, kind[k], 1, 0, ""};
+    }
+    const char *note = "VERSUS THE WEB VERSION: MOHEEB AND LUIS IN THE WORKSHOP";
+    t_draw(c, F_TYPE, 11, 1.1f, cx + 628 - t_width(F_TYPE, 11, 1.1f, note), cy + y_r5 + 12 + t_asc(F_TYPE, 11), note, COLA(C_INK, 0.6f));
   }
   /* status */
   for (int k = 0; k < ns; k++) t_draw(c, F_TYPE, 13, 1.82f, cx, cy + y_st + k * 17 + t_asc(F_TYPE, 13), st[k], COL(C_INK));
@@ -471,9 +365,10 @@ static void online_paint(void) {
     c_box(c, cx, py, 628, h, COL(C_PAPER), 3, COL(C_INK), 0, 0, COL(0));
     float mid = py + h / 2;
     t_draw(c, F_MARKER, 22, 0, cx + 15, mid - 12 + t_asc(F_MARKER, 22), o->peers[i].n, COL(C_INK));
-    char wp[48]; const char *wn = "?";
-    for (int k = 0; k < 4; k++) if (!strcmp(o->peers[i].w, WEAP[k].key)) wn = WEAP[k].name;
-    snprintf(wp, sizeof wp, "%s%s", wn, o->peers[i].busy ? " IN A FIGHT" : "");
+    char wp[64]; int wk = weapon_index(o->peers[i].w), fk = roster_index(o->peers[i].c);
+    const char *wn = wk >= 0 ? WEAPONS[wk].name : "?";
+    if (fk >= 0) snprintf(wp, sizeof wp, "%s, %s%s", ROSTER[fk].name, wn, o->peers[i].busy ? " IN A FIGHT" : "");
+    else snprintf(wp, sizeof wp, "%s%s", wn, o->peers[i].busy ? " IN A FIGHT" : "");
     float pw = t_width(F_TYPE, 12, 1.68f, wp);
     float right = cx + 628 - 15;
     if (!o->peers[i].busy) {
@@ -557,7 +452,7 @@ void scr_pads_changed(void) { if (scr_cur && !strcmp(scr_cur, "s-pads")) pads_pa
 
 static btn_t *menu_btns(int *n) {
   if (!scr_cur) { *n = 0; return NULL; }
-  if (!strcmp(scr_cur, "s-title")) { *n = 5; return title_b; }
+  if (!strcmp(scr_cur, "s-title")) { *n = 6; return title_b; }
   if (!strcmp(scr_cur, "s-pause")) { *n = 3; return pause_b; }
   if (!strcmp(scr_cur, "s-end")) { *n = 3; return end_b; }
   *n = 0; return NULL;
@@ -577,7 +472,7 @@ void scr_init(void) {
   tr_jump(&LD.bar, 0);
   snprintf(LD.msg, sizeof LD.msg, "unpacking the hackerspace"); load_paint_msg();
   end_layout();
-  select_head_paint();
+  menus_init();
   scr_cur = "s-load";
 }
 
@@ -589,8 +484,8 @@ void scr_show(const char *id) {
     int n; btn_t *b = menu_btns(&n);
     for (int i = 0; i < n; i++) { b[i].sel = i == 0; tr_jump(&b[i].t, i == 0 ? 1 : 0); b[i].painted = -1; }
   }
-  if (!strcmp(id, "s-select")) select_paint();
   kbd_nav = false;
+  if (menus_owns(id)) { menus_show(id); return; }
   if (!strcmp(id, "s-online")) { ol_focus = 0; online_paint(); }
   if (!strcmp(id, "s-pads")) { pd_focus = 0; pads_paint(); }
 }
@@ -612,7 +507,7 @@ void scr_frame(void) {
   }
 }
 
-static void draw_back(void) {
+void draw_back(void) {
   /* .screen .back: z-index 3 over the card; a ghost .btn without the selected state */
   btn_draw(&back_b);
 }
@@ -624,16 +519,10 @@ void scr_draw(void) {
   if (!strcmp(s, "s-title")) {
     draw_shade_h();
     L_upload(&title_L); ov_draw(title_L.t, 0, 0, 1);
-    for (int i = 0; i < 5; i++) btn_draw(&title_b[i]);
+    for (int i = 0; i < 6; i++) btn_draw(&title_b[i]);
     return;
   }
-  if (!strcmp(s, "s-select")) {
-    draw_shade_v();
-    draw_back();
-    L_upload(&sel_head); ov_draw(sel_head.t, 320, 0, 1);
-    R_draw(&sel_R);
-    return;
-  }
+  if (menus_owns(s)) { menus_draw(); return; }
   if (!strcmp(s, "s-controls")) { ov_fill(0, 0, CK_W, CK_H, 0x0a0a0a, 0.72f); L_upload(&controls_L); ov_draw(controls_L.t, 0, 0, 1); return; }
   if (!strcmp(s, "s-pause")) {
     ov_fill(0, 0, CK_W, CK_H, 0x0a0a0a, 0.72f);
@@ -670,10 +559,9 @@ static void act(const char *a) { sfx_ui_ok(); if (ui_cb.act) ui_cb.act(a); }
 static void click_hit(const hit_t *h) {
   switch (h->kind) {
     case H_ACT: act(h->s); break;
-    case H_WEAPON: if (ui_cb.weapon) ui_cb.weapon(h->a, WEAP[h->b].key); sfx_ui(); select_paint(); break;
-    case H_SWAP: if (ui_cb.swap) ui_cb.swap(); sfx_ui(); select_paint(); break;
-    case H_DIFF: if (ui_cb.diff) ui_cb.diff(h->a); sfx_ui(); select_paint(); break;
-    case H_OLW: if (ui_on_olweapon) ui_on_olweapon(WEAP[h->a].key); break;
+    case H_OLW: { int w = (weapon_index(ui_online.weapon) + h->a + WEAPON_N) % WEAPON_N; if (ui_on_olweapon) ui_on_olweapon(WEAPONS[w].key); sfx_ui(); break; }
+    case H_OLF: { int f = (roster_index(ui_online.fighter) + h->a + ROSTER_N) % ROSTER_N; if (ui_on_olfighter) ui_on_olfighter(ROSTER[f].key); sfx_ui(); break; }
+    case H_OLS: { int g = (stage_index(ui_online.stage) + h->a + STAGE_N) % STAGE_N; if (ui_on_olstage) ui_on_olstage(STAGES[g].key); sfx_ui(); break; }
     case H_CH: if (ui_on_challenge) ui_on_challenge(ui_online.peers[h->a].id); break;
     case H_FIELD: ui_online.focus = h->a; online_paint(); break;
   }
@@ -699,7 +587,7 @@ static void online_key(int code) {
   if (code == WC_KEY_UP || code == WC_KEY_LEFT || (code == WC_KEY_TAB && input_key_down(CK_KEY_LSHIFT))) ol_focus = (ol_focus + n - 1) % n;
   else if (code == WC_KEY_DOWN || code == WC_KEY_RIGHT || code == WC_KEY_TAB) ol_focus = (ol_focus + 1) % n;
   else if (code == WC_KEY_ESCAPE) { act("onback"); return; }
-  else if (code == WC_KEY_ENTER || code == WC_KEY_SPACE) { hit_t h = ol_ctl[ol_focus]; click_hit(&h); return; }
+  else if (code == WC_KEY_ENTER || code == WC_KEY_SPACE) { hit_t h = ol_ctl[ol_focus]; click_hit(&h); if (scr_cur && !strcmp(scr_cur, "s-online")) online_paint(); return; }
   else return;
   kbd_nav = true;
   o->focus = ol_ctl[ol_focus].kind == H_FIELD ? ol_ctl[ol_focus].a : 0;
@@ -720,30 +608,7 @@ void scr_key(int e) {
     else if (e == WC_KEY_ESCAPE) act("padsback");
     return;
   }
-  if (!strcmp(P, "s-select")) {
-    const char *D[4]; int nr = sel_rows(D);
-    if (e == WC_KEY_UP) { scr_sel_focus = (scr_sel_focus + nr - 1) % nr; sfx_ui(); select_paint(); }
-    else if (e == WC_KEY_DOWN) { scr_sel_focus = (scr_sel_focus + 1) % nr; sfx_ui(); select_paint(); }
-    else if (e == WC_KEY_LEFT || e == WC_KEY_RIGHT) {
-      int w = e == WC_KEY_RIGHT ? 1 : -1;
-      const char *g = D[scr_sel_focus];
-      if (!strcmp(g, "w0") || !strcmp(g, "w1")) {
-        int i = g[1] - '0';
-        int r = (weap_index(scr_sel->slots[i].weapon) + w + 4) % 4;
-        if (ui_cb.weapon) ui_cb.weapon(i, WEAP[r].key);
-        sfx_ui(); select_paint();
-      } else if (!strcmp(g, "diff")) {
-        int i = (scr_sel->level + w + 3) % 3;
-        if (ui_cb.diff) ui_cb.diff(i);
-        sfx_ui(); select_paint();
-      }
-    } else if (e == WC_KEY_TAB) { if (ui_cb.swap) ui_cb.swap(); sfx_ui(); select_paint(); }
-    else if (e == WC_KEY_ENTER || e == WC_KEY_KP_ENTER) {
-      if (!strcmp(D[scr_sel_focus], "start")) { sfx_ui_ok(); if (ui_cb.act) ui_cb.act("start"); }
-      else { scr_sel_focus = nr - 1; select_paint(); }
-    } else if (e == WC_KEY_ESCAPE) { if (ui_cb.act) ui_cb.act("back"); }
-    return;
-  }
+  if (menus_owns(P)) { menus_key(e); return; }
   if (!strcmp(P, "s-controls")) {
     if (e == WC_KEY_ESCAPE || e == WC_KEY_ENTER || e == WC_KEY_SPACE) { sfx_ui(); if (ui_cb.act) ui_cb.act("back"); }
     return;
@@ -765,17 +630,17 @@ void scr_pointer(float x, float y, bool pressed) {
   /* mouseover: a .menu .btn under the pointer becomes the selected one */
   int n; btn_t *b = menu_btns(&n);
   for (int i = 0; i < n; i++) if (btn_hit(&b[i], x, y) && i != scr_menu_idx) { scr_menu_idx = i; update_menu_sel(); }
+  if (menus_owns(P)) { menus_pointer(x, y, pressed); return; }
   if (!pressed) return;
   for (int i = 0; i < n; i++) if (btn_hit(&b[i], x, y)) { act(b[i].act); return; }
-  if (!strcmp(P, "s-select") || !strcmp(P, "s-online") || !strcmp(P, "s-pads")) {
-    if (btn_hit(&back_b, x, y)) { act(!strcmp(P, "s-select") ? "back" : !strcmp(P, "s-online") ? "onback" : "padsback"); return; }
+  if (!strcmp(P, "s-online") || !strcmp(P, "s-pads")) {
+    if (btn_hit(&back_b, x, y)) { act(!strcmp(P, "s-online") ? "onback" : "padsback"); return; }
   }
   if (!strcmp(P, "s-controls")) {
     /* GOT IT: .rowbtns .btn at the card's bottom left (Chrome: 236, 568, 172 x 57) */
     if (x >= 236 && x < 408 && y >= 568 && y < 625) act("back");
     return;
   }
-  if (!strcmp(P, "s-select")) { for (int i = 0; i < nhits; i++) if (x >= hits[i].x && x < hits[i].x + hits[i].w && y >= hits[i].y && y < hits[i].y + hits[i].h) { click_hit(&hits[i]); return; } }
   if (!strcmp(P, "s-online")) {
     for (int i = 0; i < nol_ctl; i++) { hit_t *h = &ol_ctl[i]; if (x >= h->x && x < h->x + h->w && y >= h->y && y < h->y + h->h) { ol_focus = i; hit_t c = *h; click_hit(&c); online_paint(); return; } }
   }

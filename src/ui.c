@@ -22,6 +22,8 @@ __attribute__((weak)) ui_callbacks ui_cb;
 __attribute__((weak)) ui_online_t ui_online;
 __attribute__((weak)) ui_pads_t ui_pads;
 void (*ui_on_olweapon)(const char *w);
+void (*ui_on_olfighter)(const char *key);
+void (*ui_on_olstage)(const char *key);
 void (*ui_on_challenge)(const char *peer_id);
 void (*ui_on_room_enter)(void);
 float ui_now;
@@ -752,7 +754,7 @@ void ui_show(const char *s) { scr_show(s); }
 void ui_hide_all(void) { scr_show(NULL); }
 void ui_key(int code) { if (scr_cur && strcmp(scr_cur, "s-load")) scr_key(code); }
 void ui_pointer(float x, float y, bool pressed) { if (scr_cur) scr_pointer(x, y, pressed); }
-void ui_set_select(ck_sel *sel, int mode) { scr_sel = sel; scr_mode = mode; scr_sel_focus = mode == 1 ? 3 : 2; scr_select_changed(); }
+void ui_set_select(ck_sel *sel, int mode) { scr_sel = sel; scr_mode = mode; scr_sel_focus = mode == 1 ? 5 : 4; scr_select_changed(); }
 void ui_render_select(void) { scr_select_changed(); }
 void ui_set_end(const char *name, bool wins, const char *sub) { scr_end_changed(name, wins, sub); }
 void ui_load(float p, const char *msg) { scr_load(p, msg, false); }

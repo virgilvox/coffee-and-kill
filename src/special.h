@@ -19,7 +19,7 @@
 #include "ck.h"
 
 enum { SP_EXTREME, SP_FINAL_WELD, SP_HAMMERFALL, SP_BURR_CUT, SP_ADHESION, SP_FULL_POWER, SP_N };
-const char *special_name(int sp);             /* "EXTREME", "FINAL WELD", ... */
+const char *special_name(int sp);             /* "GROUND POUND", "FINAL WELD", ... */
 bool special_is_cinematic(int sp);
 
 struct fighter;

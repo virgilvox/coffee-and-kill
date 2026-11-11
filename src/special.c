@@ -11,7 +11,7 @@
 
 void (*special_on_blow)(struct fighter *att, struct fighter *def, float dmg, bool last, v3 point, v3 dir);
 
-static const char *NAMES[SP_N] = {"EXTREME", "FINAL WELD", "COLD FORGE HAMMERFALL", "THOUSAND BURR CUT", "FIRST LAYER ADHESION", "FULL POWER, NO AIR ASSIST"};
+static const char *NAMES[SP_N] = {"GROUND POUND", "FINAL WELD", "COLD FORGE HAMMERFALL", "THOUSAND BURR CUT", "FIRST LAYER ADHESION", "FULL POWER, NO AIR ASSIST"};
 const char *special_name(int sp) { return sp >= 0 && sp < SP_N ? NAMES[sp] : ""; }
 bool special_is_cinematic(int sp) { return sp > SP_EXTREME && sp < SP_N; }
 

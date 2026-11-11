@@ -102,11 +102,11 @@ const weapon_def WEAPONS[] = {
   {"sledge", "SLEDGE", "HEAVY", "Slow swing. Big dents.", 1.5f, 0.8f, 16756768, true, -0.05f, 0.74f, 0.17f, 1, SP_EXTREME, true, page_build, 2},
   {"crowbar", "CROWBAR", "REACH", "Long and mean. Hooks in from range.", 1.1f, 0.95f, 15903518, false, -0.05f, 0.62f, 0.13f, 1, SP_EXTREME, true, page_build, 3},
   /* KEYHOLDER: the blade segments are its SEG table, cut down to what lands in a duel this close */
-  {"arc", "ARC BLADE", "PLASMA", "A welding handle with a blade of plasma. Extreme: Final Weld.", 0.95f, 1.12f, 0x58c8ff, false, 0.26f, 1.05f, 0.12f, 1, SP_FINAL_WELD, false, kweapon_build, WP_ARC},
-  {"maul", "BALL PEEN MAUL", "GUARD BREAK", "A great hammer with a fantasy head. Extreme: Cold Forge Hammerfall.", 1.55f, 0.78f, 0xff9030, true, 0.8f, 1.16f, 0.2f, 1, SP_HAMMERFALL, false, kweapon_build, WP_MAUL},
-  {"twin", "DEBURR TWINS", "FASTEST", "Paired curved daggers. Long combos. Extreme: Thousand Burr Cut.", 0.68f, 1.42f, 0x40f0d0, false, 0.05f, 0.5f, 0.12f, 2, SP_BURR_CUT, false, kweapon_build, WP_TWIN},
-  {"spear", "SPOOL NAGINATA", "LONG REACH", "A glaive wound from printer filament. Extreme: First Layer Adhesion.", 1.08f, 0.92f, 0xff8a24, false, 0.7f, 1.3f, 0.12f, 1, SP_ADHESION, false, kweapon_build, WP_SPEAR},
-  {"staff", "BEAM STAFF", "LASER", "A laser tube on a staff. Extreme: Full Power, No Air Assist.", 0.9f, 1.15f, 0xff3a78, false, 0.6f, 1.25f, 0.13f, 1, SP_FULL_POWER, false, kweapon_build, WP_STAFF},
+  {"arc", "ARC BLADE", "PLASMA", "A welding handle with a blade of plasma.", 0.95f, 1.12f, 0x58c8ff, false, 0.26f, 1.05f, 0.12f, 1, SP_FINAL_WELD, false, kweapon_build, WP_ARC},
+  {"maul", "BALL PEEN MAUL", "GUARD BREAK", "A great hammer with a fantasy head.", 1.55f, 0.78f, 0xff9030, true, 0.8f, 1.16f, 0.2f, 1, SP_HAMMERFALL, false, kweapon_build, WP_MAUL},
+  {"twin", "DEBURR TWINS", "FASTEST", "Paired curved daggers. Long combos.", 0.68f, 1.42f, 0x40f0d0, false, 0.05f, 0.5f, 0.12f, 2, SP_BURR_CUT, false, kweapon_build, WP_TWIN},
+  {"spear", "SPOOL NAGINATA", "LONG REACH", "A glaive wound from printer filament.", 1.08f, 0.92f, 0xff8a24, false, 0.7f, 1.3f, 0.12f, 1, SP_ADHESION, false, kweapon_build, WP_SPEAR},
+  {"staff", "BEAM STAFF", "LASER", "A laser tube on a staff.", 0.9f, 1.15f, 0xff3a78, false, 0.6f, 1.25f, 0.13f, 1, SP_FULL_POWER, false, kweapon_build, WP_STAFF},
 };
 const int WEAPON_N = (int)(sizeof WEAPONS / sizeof WEAPONS[0]);
 

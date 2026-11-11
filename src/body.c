@@ -15,7 +15,7 @@ struct body {
   t3_object *bone[BONE_N], *grip[2];
   ck_mixer *mixer;
   /* the page body */
-  t3_gltf *gltf; ck_mixer own; t3_mesh *blob; t3_scene *scene;
+  t3_gltf *gltf; ck_mixer own; t3_mesh *blob; t3_scene *scene; bool blob_on;
   /* KEYHOLDER */
   actor_t *actor;
 };
@@ -187,5 +187,13 @@ void body_teleport(body *b) {
 
 void body_blob_shadow(body *b, bool on) {
   if (b->actor) { actor_shadow(b->actor, true); return; }   /* KEYHOLDER's bodies always have theirs */
-  if (b->blob) b->blob->base.visible = on;
+  b->blob_on = on;
+  if (b->blob) b->blob->base.visible = on && b->root->visible;
+}
+
+void body_visible(body *b, bool on) {
+  if (b->actor) { actor_visible(b->actor, on); return; }
+  b->root->visible = on;
+  if (b->blob && !on) b->blob->base.visible = false;
+  if (b->blob && on) b->blob->base.visible = b->scene && b->blob_on;
 }
