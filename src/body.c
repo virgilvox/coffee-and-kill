@@ -89,9 +89,13 @@ static actor_palette kh_palette(const roster_entry *e, int c) {
   return pal;
 }
 
-/* a page body in colour c: its scanned texture tinted by tone (roster.h). Neutral pixels (low
- * saturation, so not skin) take the dark tint below mid grey and the light tint above it, with
- * soft edges so the scan's shading carries over. */
+/* a page body in colour c: its scanned texture tinted by tone (roster.h). Neutral pixels take the
+ * dark tint below mid grey and the light tint above it, with soft edges so the scan's shading
+ * carries over. The scans' atlas is a scatter of photo patches, so skin cannot be masked by UV
+ * region; it is masked by colour instead: a warm hue (red to amber) with more chroma than a
+ * cast. The scanned skin is only 0.15 to 0.35 saturated, low enough to pass for neutral, while
+ * the clothes it must not catch are cool (MOHEEB's lavender and cyan shirt) or barely warm
+ * (LUIS's cream shorts, chroma under 0.035). */
 static float smooth(float a, float b, float x) { float t = ck_clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
 static void hsv_rgb(float h, float s, float v, float *o) {
   h = fmodf(h / 60.f + 12, 6);
@@ -109,9 +113,14 @@ static void page_tint(t3_texture *T, const roster_swatch *dark, const roster_swa
   for (size_t i = 0; i < n; i++) {
     uint8_t *p = T->pixels + i * 4;
     float r = p[0] / 255.f, g = p[1] / 255.f, b = p[2] / 255.f;
-    float mx = fmaxf(r, fmaxf(g, b)), mn = fminf(r, fminf(g, b)), v = mx, s = mx > 0 ? (mx - mn) / mx : 0;
+    float mx = fmaxf(r, fmaxf(g, b)), mn = fminf(r, fminf(g, b)), c = mx - mn, v = mx, s = mx > 0 ? c / mx : 0;
     float wn = 1 - smooth(0.12f, 0.32f, s);
     if (wn <= 0) continue;
+    if (c > 0 && mx == r) {   /* hue -60 to 60 degrees: the skin band is about -25 to 58 */
+      float h = 60 * (g - b) / c;
+      wn *= 1 - smooth(-25, -8, h) * (1 - smooth(42, 58, h)) * smooth(0.035f, 0.07f, c);
+      if (wn <= 0) continue;
+    }
     float wd = hd ? wn * (1 - smooth(0.30f, 0.50f, v)) : 0, wl = hl ? wn * smooth(0.50f, 0.70f, v) : 0;
     const roster_swatch *t = wd >= wl ? dark : light; float w = fmaxf(wd, wl);
     if (w <= 0) continue;
