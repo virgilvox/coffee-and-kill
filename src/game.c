@@ -1477,6 +1477,24 @@ void game_init(void) {
   ui_show("s-load");
 }
 
+/* The first KEYHOLDER body on the fighter select used to link its programs there and then: one
+ * frame of 300 to 400 ms at 1080p, the moment the cursor first rested on one. Build a KEYHOLDER
+ * fighter now, behind the loading bar, and compile the workshop with it holding each weapon under
+ * both lights (the select's and the fight's), then free it; the programs stay. */
+static void warm_programs(void) {
+  int ri = -1;
+  for (int i = 0; i < ROSTER_N && ri < 0; i++) if (ROSTER[i].kind == BODY_KH) ri = i;
+  if (ri < 0) return;
+  fighter *f = fighter_new(ri, 0);
+  body_attach(f->body, stage_scene());
+  t3_object_set_position(f->root, 0, 0, 0);
+  for (int w = 0; w < WEAPON_N; w++) {
+    fighter_set_weapon(f, w);
+    for (int m = 1; m >= 0; m--) { stage_menu_light(m); t3_renderer_compile(CK_R, stage_scene(), G.cam); }
+  }
+  fighter_free(f);
+}
+
 /* init(A) of the page: the load bar moves through these */
 bool game_boot(int stage) {
   switch (stage) {
@@ -1490,6 +1508,8 @@ bool game_boot(int stage) {
     ui_load(0.8f, "lighting up");
     return false;
   }
+  static bool warmed;
+  if (!warmed) { warmed = true; warm_programs(); ui_load(0.9f, "warming up"); return false; }
   apply_sel();
   ui_load(1, "ready");
   /* e(): the menu, the title */
