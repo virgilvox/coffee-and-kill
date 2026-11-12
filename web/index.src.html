@@ -31,49 +31,60 @@ body.hot #bar, #bar:hover, #bar:focus-within, body.loading #bar { opacity: 1; }
 #gate::before { content: ""; position: fixed; inset: 0; pointer-events: none;
   background: linear-gradient(90deg, rgba(20,17,13,.9) 0%, rgba(20,17,13,.7) 45%, rgba(20,17,13,.25) 80%, rgba(20,17,13,.5) 100%); }
 #gate.gone { display: none; }
-.card { position: relative; z-index: 2; min-height: 100%; display: grid; grid-template-columns: minmax(0, 500px) minmax(0, 620px); gap: 26px clamp(20px, 3vw, 46px);
-  align-content: center; justify-content: center; padding: 40px 28px 64px; }
-.left { display: flex; flex-direction: column; gap: 22px; }
-.kicker { display: inline-flex; align-self: flex-start; align-items: center; gap: 10px; background: var(--cream); color: var(--ink); border: 3px solid var(--ink);
+.hero { position: relative; z-index: 2; min-height: 100%; display: flex; flex-direction: column; justify-content: center;
+  padding: 56px clamp(24px, 7vw, 120px) 72px; max-width: 900px; }
+.kicker { display: inline-flex; align-self: flex-start; background: var(--cream); color: var(--ink); border: 3px solid var(--ink);
   box-shadow: 5px 5px 0 var(--pink); padding: 6px 14px; font: 700 13px/1 ui-monospace, Menlo, monospace; letter-spacing: .32em; transform: rotate(-2deg); }
-h1 { margin: 0; font-size: clamp(54px, 8.4vw, 104px); line-height: .86; color: var(--cream); letter-spacing: 0;
+h1 { margin: 26px 0 0; font-size: clamp(48px, 9vw, 128px); line-height: .86; color: var(--cream); letter-spacing: 0;
   text-shadow: 6px 6px 0 var(--pink), -2px -2px 0 var(--ink), 2px -2px 0 var(--ink), -2px 2px 0 var(--ink), 2px 2px 0 var(--ink); }
 h1 span { color: var(--pink); text-shadow: 6px 6px 0 var(--ink), -2px -2px 0 var(--ink), 2px -2px 0 var(--ink), -2px 2px 0 var(--ink), 2px 2px 0 var(--ink); }
-.tag { margin: 0; font-size: 15px; letter-spacing: .06em; color: var(--cream); text-shadow: 0 1px 2px #000; }
+.tag { margin: 26px 0 0; font-size: clamp(14px, 1.4vw, 17px); line-height: 1.55; color: var(--cream); max-width: 36em; text-shadow: 0 1px 3px #000; overflow-wrap: anywhere; }
 .tag em { font-style: normal; color: var(--pink); }
-.pitch { color: var(--cream); font-size: 14px; line-height: 1.6; max-width: 520px; margin: 0; text-shadow: 0 1px 2px #000; }
-.go-row { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
-#go { font: 400 30px/1 "Archivo Black", Impact, sans-serif; letter-spacing: .02em; color: var(--ink); background: var(--pink); border: 4px solid var(--ink);
-  padding: 16px 40px; cursor: pointer; box-shadow: 7px 7px 0 var(--ink); transition: transform .08s, box-shadow .08s; }
+.play { margin-top: 36px; display: flex; flex-direction: column; gap: 12px; width: min(420px, 100%); }
+#go { position: relative; overflow: hidden; width: 100%; height: 76px; padding: 0 26px; text-align: left; cursor: pointer;
+  font: 400 30px/1 "Archivo Black", Impact, sans-serif; color: var(--ink); background: var(--pink); border: 4px solid var(--ink);
+  box-shadow: 7px 7px 0 var(--ink); transition: transform .08s, box-shadow .08s; }
+#go::after { content: ""; position: absolute; right: 26px; top: 50%; transform: translateY(-50%); border-top: 13px solid transparent; border-bottom: 13px solid transparent; border-left: 20px solid var(--ink); }
 #go:hover:not(:disabled) { transform: translate(-3px, -3px); box-shadow: 10px 10px 0 var(--ink); }
-#go:disabled { background: #5a5246; color: var(--dim); cursor: default; }
-#status { color: var(--dim); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+#go:focus-visible { outline: 3px solid var(--cream); outline-offset: 6px; }
+#go:disabled { cursor: default; background: var(--cream); color: var(--ink); }
+#go:disabled::after { display: none; }
+#go .fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--pink); border-right: 4px solid var(--ink); transition: width .2s linear; }
+#go .fill::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(-45deg, rgba(21,18,15,.12) 0 10px, transparent 10px 20px);
+  background-size: 28px 28px; animation: crawl .9s linear infinite; }
+@keyframes crawl { to { background-position: 28px 0; } }
+#go .txt { position: relative; z-index: 1; }
+#go:not(:disabled) .fill { display: none; }
+.meta { display: flex; justify-content: space-between; gap: 12px; color: var(--dim); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; min-height: 16px; }
 #err { color: #fff; background: var(--err); border: 3px solid var(--ink); padding: 8px 12px; display: none; font-size: 13px; line-height: 1.5; }
 #err.show { display: block; }
-.ctl { align-self: center; background: var(--cream); color: var(--ink); border: 4px solid var(--ink); box-shadow: 8px 8px 0 var(--pink); padding: 16px 18px 12px; }
-.ctl h2 { margin: 0 0 6px; font-size: 24px; border-bottom: 3px solid var(--ink); padding-bottom: 6px; }
-.ctl table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.ctl th { text-align: left; font-weight: 700; letter-spacing: .14em; font-size: 10px; padding: 6px 5px 6px; color: #5a5246; }
-.ctl td { padding: 3px 5px; border-top: 2px solid rgba(21,18,15,.12); white-space: nowrap; }
-.ctl td:first-child { font-weight: 700; letter-spacing: .06em; }
-.ctl p { margin: 8px 0 0; font-size: 11px; line-height: 1.5; color: #4a4338; }
-kbd { display: inline-block; min-width: 20px; padding: 2px 5px 3px; margin: 0 1px; text-align: center; background: var(--paper); color: var(--ink); border: 2px solid var(--ink);
+.links { margin-top: 26px; display: flex; gap: 12px; flex-wrap: wrap; }
+.link { background: var(--cream); color: var(--ink); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 7px 12px; cursor: pointer;
+  font: 700 12px/1 ui-monospace, Menlo, monospace; letter-spacing: .14em; }
+.link:hover, .link:focus-visible { background: var(--pink); outline: 0; }
+.foot { position: fixed; left: clamp(24px, 7vw, 120px); bottom: 22px; z-index: 2; color: #8a8172; font-size: 11px; letter-spacing: .06em; }
+#info { position: fixed; inset: 0; z-index: 12; display: none; align-items: center; justify-content: center; background: rgba(20,17,13,.7); backdrop-filter: blur(3px); }
+#info.open { display: flex; }
+.sheet { width: min(660px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; background: var(--cream); color: var(--ink); border: 4px solid var(--ink);
+  box-shadow: 10px 10px 0 var(--pink); padding: 20px 24px 22px; }
+.tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+.tabs button { flex: 1; background: var(--paper); color: var(--ink); border: 3px solid var(--ink); padding: 9px 6px; cursor: pointer; font: 700 12px/1 ui-monospace, Menlo, monospace; letter-spacing: .12em; }
+.tabs button.on { background: var(--ink); color: var(--cream); }
+.close { float: right; margin: -8px -10px 0 0; background: none; border: 0; color: var(--ink); font: 700 24px/1 ui-monospace, monospace; cursor: pointer; padding: 4px 8px; }
+.pane { display: none; } .pane.on { display: block; }
+.pane table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pane td { padding: 6px 4px; border-top: 2px solid rgba(21,18,15,.12); }
+.pane td:first-child { font-weight: 700; letter-spacing: .05em; width: 34%; }
+.pane p { font-size: 12.5px; line-height: 1.65; margin: 0 0 10px; color: #3d372e; }
+kbd { display: inline-block; min-width: 22px; padding: 3px 6px 4px; margin: 0 1px; text-align: center; background: var(--paper); color: var(--ink); border: 2px solid var(--ink);
   font: 700 11px/1.1 ui-monospace, Menlo, monospace; box-shadow: 2px 2px 0 var(--ink); }
-.pb { display: inline-grid; place-content: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; font: 800 10px/1 ui-monospace, Menlo, monospace;
+.pb { display: inline-grid; place-content: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; font: 800 10px/1 ui-monospace, Menlo, monospace;
   color: #fff; background: #4a4f5c; margin: 0 1px; border: 2px solid var(--ink); }
 .pb.a { background: #3aa655; } .pb.b { background: #d6453a; } .pb.x { background: #3a7bd6; } .pb.y { background: #e0b62a; color: var(--ink); }
-.foot { grid-column: 1 / -1; color: #c9c0b0; font-size: 11px; line-height: 1.6; max-width: 1070px; background: rgba(20,17,13,.85); padding: 8px 12px; border-left: 4px solid var(--pink); }
-.foot a, .foot button { color: var(--pink); background: none; border: 0; font: inherit; cursor: pointer; padding: 0; text-decoration: underline; }
-@media (max-height: 760px) { .card { padding-top: 26px; gap: 16px 30px; } .left { gap: 14px; } .pitch { font-size: 12.5px; } .ctl td { padding: 1px 5px; } #go { font-size: 24px; padding: 12px 30px; } }
-@media (max-width: 960px) { .card { grid-template-columns: minmax(0, 1fr); padding: 64px 16px 40px; } .ctl td { white-space: normal; } }
-/* narrow screens: the table scrolls inside its card instead of running off the page */
-.tablewrap { overflow-x: auto; max-width: 100%; }
-.ctl td[colspan], .ctl td:last-child { white-space: normal; }
-.ctl { min-width: 0; max-width: 100%; }
-.pitch, .tag { overflow-wrap: anywhere; }
-/* a phone: this page is the big screen; the note says how to play with a phone */
-#phone { display: none; background: var(--cream); color: var(--ink); border: 3px solid var(--ink); box-shadow: 5px 5px 0 var(--cyan); padding: 10px 12px; font-size: 13px; line-height: 1.5; }
+#phone { display: none; margin-top: 20px; background: var(--cream); color: var(--ink); border: 3px solid var(--ink); box-shadow: 5px 5px 0 var(--cyan); padding: 10px 12px; font-size: 13px; line-height: 1.5; max-width: 420px; }
 #phone.show { display: block; }
+@media (max-height: 640px) { .tag { display: none; } .play { margin-top: 22px; } }
+@media (max-width: 560px) { .foot { display: none; } }
 #over { position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center; background: rgba(20,17,13,.9);
   border: 4px dashed var(--pink); font-size: 22px; color: var(--pink); }
 #over.show { display: flex; }
@@ -88,34 +99,61 @@ kbd { display: inline-block; min-width: 20px; padding: 2px 5px 3px; margin: 0 1p
 </div>
 
 <div id="gate">
-  <div class="card">
-    <div class="left">
-      <div class="kicker">HACKERSPACE BRAWL</div>
-      <h1 class="display">COFFEE<br><span>&amp; KILL</span></h1>
-      <p class="tag">brew first. break things. <em>swing wrenches.</em></p>
-      <p class="pitch">MOHEEB and LUIS, and now the whole of KEYHOLDER's day: Vee, Dex and Ruth, Vinyl Vic, Rennick and Dobbs, High Score, Bex, Copper Cal, Root and Brant Holloway. Nine weapons, from the pipe wrench to the Spool Naginata, each with its own EXTREME. Fight in the workshop, the lab, on Main Street, in the back lot or the Battle Zone arenas, against a friend, the CPU, or a bracket of eight in TOURNEY. Best of three, a dance break between rounds.</p>
-      <div class="go-row"><button id="go" class="display" disabled>LOADING</button><span id="status">starting</span></div>
-      <div id="phone">This page is the big screen: it needs a keyboard, a mouse or a gamepad. To play with your phone, open this page on a computer or TV, choose PHONE PADS in the game and scan its code with the phone. The phone becomes the controller.</div>
+  <div class="hero">
+    <div class="kicker">HACKERSPACE BRAWL</div>
+    <h1 class="display">COFFEE<br><span>&amp; KILL</span></h1>
+    <p class="tag">Moheeb and Luis, and the whole of KEYHOLDER's day, swinging nine weapons through the workshop, the lab and Main Street. Versus a friend, the CPU, or a bracket of eight. <em>Brew first. Break things.</em></p>
+    <div class="play">
+      <button id="go" class="display" disabled><span class="fill" id="fill"></span><span class="txt" id="goTxt">LOADING</span></button>
+      <div class="meta"><span id="status">starting</span><span id="amount"></span></div>
       <div id="err"></div>
     </div>
-    <div class="ctl">
-      <h2 class="display">CONTROLS</h2>
-      <div class="tablewrap"><table>
-        <tr><th></th><th>ONE PLAYER</th><th>TWO PLAYERS</th><th>GAMEPAD</th></tr>
-        <tr><td>MOVE</td><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows</td><td>P1 <kbd>WASD</kbd> P2 arrows</td><td><span class="pb">STICK</span></td></tr>
-        <tr><td>LIGHT</td><td><kbd>Q</kbd> <kbd>J</kbd> <kbd>Z</kbd></td><td><kbd>Q</kbd> / <kbd>,</kbd></td><td><span class="pb x">X</span></td></tr>
-        <tr><td>HEAVY</td><td><kbd>E</kbd> <kbd>K</kbd> <kbd>X</kbd></td><td><kbd>E</kbd> / <kbd>.</kbd></td><td><span class="pb y">Y</span></td></tr>
-        <tr><td>KICK</td><td><kbd>R</kbd> <kbd>L</kbd> <kbd>C</kbd></td><td><kbd>R</kbd> / <kbd>/</kbd></td><td><span class="pb b">B</span></td></tr>
-        <tr><td>BLOCK (HOLD)</td><td><kbd>SPACE</kbd> <kbd>U</kbd> <kbd>V</kbd></td><td><kbd>SPACE</kbd> / <kbd>R SHIFT</kbd></td><td><span class="pb">LB</span> <span class="pb">RB</span> <span class="pb">LT</span></td></tr>
-        <tr><td>DODGE</td><td><kbd>SHIFT</kbd> <kbd>I</kbd></td><td><kbd>L SHIFT</kbd> / <kbd>ENTER</kbd></td><td><span class="pb a">A</span></td></tr>
-        <tr><td>EXTREME</td><td><kbd>F</kbd> <kbd>O</kbd> <kbd>B</kbd></td><td><kbd>F</kbd> / <kbd>'</kbd></td><td><span class="pb">RT</span></td></tr>
-        <tr><td>PAUSE</td><td colspan="2"><kbd>ESC</kbd> <kbd>P</kbd>, <kbd>M</kbd> mutes, <kbd>N</kbd> music</td><td><span class="pb">START</span></td></tr>
-        <tr><td>MENUS</td><td colspan="2">arrows, <kbd>ENTER</kbd> picks, <kbd>ESC</kbd> or <kbd>BACKSPACE</kbd> back, <kbd>TAB</kbd> swaps sides, <kbd>E</kbd> colour, the mouse</td><td><span class="pb">D-PAD</span> <span class="pb a">A</span> <span class="pb b">B</span> <span class="pb y">Y</span> <span class="pb">LB</span> <span class="pb">RB</span></td></tr>
-      </table></div>
-      <p>In one player every pad drives P1; in two players pad 1 is P1 and pad 2 is P2, and on the fighter select the keyboard splits: P1 <kbd>WASD</kbd> <kbd>Q</kbd> picks, <kbd>R</kbd> back, <kbd>E</kbd> colour; P2 arrows, <kbd>,</kbd> picks, <kbd>/</kbd> back, <kbd>.</kbd> colour. In full screen some browsers take <kbd>ESC</kbd>: <kbd>P</kbd> pauses and <kbd>BACKSPACE</kbd> goes back. Online versus pairs with other carts and with the original web version.</p>
+    <div class="links">
+      <button class="link" id="openCtl">CONTROLS</button>
+      <button class="link" id="openAbout">CREDITS</button>
+      <button class="link" id="pick">LOAD ANOTHER CART</button>
+      <input type="file" id="file" accept=".wasc,application/zip" hidden>
     </div>
-    <div class="foot">The web version of COFFEE &amp; KILL is at weird.link/coffeekill. Animations: Quaternius Universal Animation Library 1 and 2 (CC0). Props: Kenney Survival and Factory kits (CC0). From KEYHOLDER: characters from the VRoid Project samples, the lab from the HSL-108 model of HeatSync Labs, 108 West Main, Mesa, downtown from OpenStreetMap contributors and BikeMesa by Luis Montes; venue names and signs belong to their owners. Engine: three.js by way of three.c, wasmcart. Fonts: Archivo, IBM Plex Mono and JetBrains Mono (SIL OFL). HeatSync Labs does not settle anything by wrench. <a id="pick" href="#" onclick="return false">Load another cart</a>.
-      <input type="file" id="file" accept=".wasc,application/zip" hidden></div>
+    <div id="phone">This page is the big screen: it needs a keyboard, a mouse or a gamepad. To play with your phone, open this page on a computer or TV, choose PHONE PADS in the game and scan its code with the phone. The phone becomes the controller.</div>
+  </div>
+  <div class="foot">HeatSync Labs does not settle anything by wrench.</div>
+</div>
+<div id="info" role="dialog" aria-modal="true" aria-label="Controls and credits">
+  <div class="sheet">
+    <button class="close" id="closeInfo" aria-label="Close">&times;</button>
+    <div class="tabs"><button data-pane="one" class="on">ONE PLAYER</button><button data-pane="two">TWO PLAYERS</button><button data-pane="pad">GAMEPAD</button><button data-pane="about">CREDITS</button></div>
+    <div class="pane on" id="pane-one"><table>
+      <tr><td>Move</td><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows</td></tr>
+      <tr><td>Light</td><td><kbd>Q</kbd> <kbd>J</kbd> <kbd>Z</kbd></td></tr>
+      <tr><td>Heavy</td><td><kbd>E</kbd> <kbd>K</kbd> <kbd>X</kbd></td></tr>
+      <tr><td>Kick</td><td><kbd>R</kbd> <kbd>L</kbd> <kbd>C</kbd></td></tr>
+      <tr><td>Block (hold)</td><td><kbd>SPACE</kbd> <kbd>U</kbd> <kbd>V</kbd></td></tr>
+      <tr><td>Dodge</td><td><kbd>SHIFT</kbd> <kbd>I</kbd></td></tr>
+      <tr><td>Extreme</td><td><kbd>F</kbd> <kbd>O</kbd> <kbd>B</kbd></td></tr>
+      <tr><td>Pause</td><td><kbd>ESC</kbd> <kbd>P</kbd>, <kbd>M</kbd> mutes, <kbd>N</kbd> music</td></tr>
+      <tr><td>Menus</td><td>arrows, <kbd>ENTER</kbd> picks, <kbd>ESC</kbd> back, <kbd>TAB</kbd> swaps sides, <kbd>E</kbd> colour</td></tr>
+    </table></div>
+    <div class="pane" id="pane-two"><table>
+      <tr><td></td><td><b>P1</b></td><td><b>P2</b></td></tr>
+      <tr><td>Move</td><td><kbd>WASD</kbd></td><td>arrows</td></tr>
+      <tr><td>Light</td><td><kbd>Q</kbd></td><td><kbd>,</kbd></td></tr>
+      <tr><td>Heavy</td><td><kbd>E</kbd></td><td><kbd>.</kbd></td></tr>
+      <tr><td>Kick</td><td><kbd>R</kbd></td><td><kbd>/</kbd></td></tr>
+      <tr><td>Block (hold)</td><td><kbd>SPACE</kbd></td><td><kbd>R SHIFT</kbd></td></tr>
+      <tr><td>Dodge</td><td><kbd>L SHIFT</kbd></td><td><kbd>ENTER</kbd></td></tr>
+      <tr><td>Extreme</td><td><kbd>F</kbd></td><td><kbd>'</kbd></td></tr>
+      <tr><td>Fighter select</td><td><kbd>Q</kbd> picks, <kbd>R</kbd> back, <kbd>E</kbd> colour</td><td><kbd>,</kbd> picks, <kbd>/</kbd> back, <kbd>.</kbd> colour</td></tr>
+    </table><p style="margin-top:12px">In one player every pad drives P1; in two players pad 1 is P1 and pad 2 is P2. Online versus pairs with other carts and with the original web version.</p></div>
+    <div class="pane" id="pane-pad"><table>
+      <tr><td>Move</td><td><span class="pb">STICK</span></td></tr>
+      <tr><td>Light / heavy / kick</td><td><span class="pb x">X</span> <span class="pb y">Y</span> <span class="pb b">B</span></td></tr>
+      <tr><td>Block (hold)</td><td><span class="pb">LB</span> <span class="pb">RB</span> <span class="pb">LT</span></td></tr>
+      <tr><td>Dodge</td><td><span class="pb a">A</span></td></tr>
+      <tr><td>Extreme</td><td><span class="pb">RT</span></td></tr>
+      <tr><td>Pause</td><td><span class="pb">START</span></td></tr>
+      <tr><td>Menus</td><td><span class="pb">D-PAD</span> <span class="pb a">A</span> <span class="pb b">B</span> <span class="pb y">Y</span> <span class="pb">LB</span> <span class="pb">RB</span></td></tr>
+    </table></div>
+    <div class="pane" id="pane-about"><p>The web version of COFFEE &amp; KILL is at weird.link/coffeekill. Animations: Quaternius Universal Animation Library 1 and 2 (CC0). Props: Kenney Survival and Factory kits (CC0). From KEYHOLDER: characters from the VRoid Project samples, the lab from the HSL-108 model of HeatSync Labs, 108 West Main, Mesa, downtown from OpenStreetMap contributors and BikeMesa by Luis Montes; venue names and signs belong to their owners. Engine: three.js by way of three.c, wasmcart. Fonts: Archivo, IBM Plex Mono and JetBrains Mono (SIL OFL). HeatSync Labs does not settle anything by wrench.</p></div>
   </div>
 </div>
 <div id="over" class="display">DROP A .WASC CART TO PLAY IT</div>
@@ -129,6 +167,18 @@ kbd { display: inline-block; min-width: 20px; padding: 2px 5px 3px; margin: 0 1p
 const $ = (id) => document.getElementById(id);
 const canvas = $('screen');
 const setStatus = (s) => { $('status').textContent = s; };
+/* the PLAY button fills as the cart comes in; amount is the note under its right end */
+function setProgress(frac, amount) { $('fill').style.width = Math.round(Math.max(0, Math.min(1, frac)) * 100) + '%'; $('amount').textContent = amount || ''; }
+const setGo = (t) => { $('goTxt').textContent = t; };
+function openInfo(pane) { $('info').classList.add('open'); document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.pane === pane));
+  document.querySelectorAll('.pane').forEach((p) => p.classList.toggle('on', p.id === 'pane-' + pane)); }
+const closeInfo = () => $('info').classList.remove('open');
+document.querySelectorAll('.tabs button').forEach((b) => (b.onclick = () => openInfo(b.dataset.pane)));
+$('openCtl').onclick = () => openInfo(navigator.getGamepads && [...navigator.getGamepads()].some(Boolean) ? 'pad' : 'one');
+$('openAbout').onclick = () => openInfo('about');
+$('closeInfo').onclick = closeInfo;
+$('info').onclick = (e) => { if (e.target === $('info')) closeInfo(); };
+window.addEventListener('keydown', (e) => { if (e.code === 'Escape' && $('info').classList.contains('open')) { e.preventDefault(); closeInfo(); } });
 function showError(msg) { const e = $('err'); e.textContent = msg; e.classList.add('show'); }
 
 /* ---------- small safe storage helpers ---------- */
@@ -335,9 +385,9 @@ async function loadOther(file) {
   await persist();
   if (host) { try { host.destroy(); } catch {} host = null; }
   $('gate').classList.remove('gone'); document.body.classList.add('loading');
-  $('err').classList.remove('show'); $('go').disabled = true; $('go').textContent = 'LOADING';
+  $('err').classList.remove('show'); $('go').disabled = true; setGo('LOADING'); setProgress(0, '');
   const ok = await startCart(b, 'save:' + file.name + ':' + b.length);
-  if (ok) { setStatus(file.name + ' ready'); $('go').disabled = false; $('go').textContent = 'PLAY'; }
+  if (ok) { setStatus(file.name + ' ready'); $('go').disabled = false; setGo('PLAY'); setProgress(1, ''); }
 }
 let dragDepth = 0;
 window.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; $('over').classList.add('show'); });
@@ -351,19 +401,35 @@ async function boot() {
   gl = makeGL();
   if (!gl) {
     setStatus('WebGL2 unavailable');
-    $('go').textContent = 'CANNOT RUN';
+    setGo('CANNOT RUN');
     showError('This browser or device does not offer WebGL2, which COFFEE & KILL needs. Try a current Chrome, Firefox or Safari, check that hardware acceleration is on, and update the graphics drivers.');
     return;
   }
   await initAudio();
   let cart;
-  try { cart = b64ToBytes($('cart-data').textContent); } catch (e) { showError('The embedded cart could not be read.'); return; }
+  const embedded = $('cart-data').textContent.trim();
+  if (embedded) { try { cart = b64ToBytes(embedded); } catch (e) { showError('The embedded cart could not be read.'); return; } }
+  else {   /* the Pages build: the cart sits beside a small loader page, fetched with a progress bar */
+    try {
+      setStatus('downloading the game'); setGo('DOWNLOADING');
+      const r = await fetch('coffee-and-kill.wasc'); if (!r.ok) throw new Error(r.status);
+      const total = +r.headers.get('content-length') || 0, rd = r.body.getReader(), parts = []; let got = 0;
+      const mb = (n) => (n / 1048576).toFixed(0);
+      for (;;) {
+        const { done, value } = await rd.read(); if (done) break; parts.push(value); got += value.length;
+        if (total) { setProgress(got / total * .94, mb(got) + ' / ' + mb(total) + ' MB'); setGo(Math.round(got * 100 / total) + '%'); }
+        else setProgress(.5, mb(got) + ' MB');
+      }
+      cart = new Uint8Array(got); let o = 0; for (const q of parts) { cart.set(q, o); o += q.length; }
+    } catch (e) { showError('The game file could not be downloaded. Check the connection and reload.'); return; }
+  }
+  setGo('STARTING'); setStatus('starting the cart'); setProgress(.97, '');
   const ok = await startCart(cart, 'save');
-  if (!ok) return;
+  if (!ok) { setGo('FAILED'); return; }
   setStatus('ready');
-  $('go').disabled = false; $('go').textContent = 'PLAY';
+  $('go').disabled = false; setGo('PLAY'); setProgress(1, '');
   $('go').onclick = enterGame;
-  window.addEventListener('keydown', (e) => { if (!gateGone() && (e.code === 'Enter' || e.code === 'Space') && !$('go').disabled) { e.preventDefault(); enterGame(); } });
+  window.addEventListener('keydown', (e) => { if (!gateGone() && (e.code === 'Enter' || e.code === 'Space') && !$('go').disabled && !$('info').classList.contains('open') && !(document.activeElement && document.activeElement.classList.contains('link'))) { e.preventDefault(); enterGame(); } });
   // a gamepad on the start card: A or Start plays (the pad's first press after it wakes counts)
   let padWas = true;
   (function gatePads() {

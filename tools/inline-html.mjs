@@ -1,5 +1,5 @@
 // inline-html.mjs (from KEYHOLDER): fold the player shell, the wasmcart web host and the cart into ONE html file.
-// usage: node inline-html.mjs <index.src.html> <host-bundle.js> <cart.wasc> <out.html>
+// usage: node inline-html.mjs <index.src.html> <host-bundle.js> <cart.wasc | -> <out.html>
 // Placeholders in the shell: /*HOST_BUNDLE*/, __CART_B64__, __FONT_B64__, and __BACKDROP_B64__ (backdrop.jpg beside
 // the shell: a frame of the game behind the start card) when the shell has it.
 import fs from 'node:fs';
@@ -15,7 +15,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const font = fs.readFileSync(path.join(root, 'assets/fonts/Archivo.ttf')).toString('base64');
 // a literal "</script" inside the bundle would end the inline script tag early
 const host = fs.readFileSync(bundle, 'utf8').replace(/<\/script/gi, '<\\/script');
-const cartB64 = fs.readFileSync(cart).toString('base64');
+const cartB64 = cart === '-' ? '' : fs.readFileSync(cart).toString('base64');   // '-': a loader page that fetches the cart beside it
 
 let html = fs.readFileSync(src, 'utf8');
 const subs = [['/*HOST_BUNDLE*/', host], ['__CART_B64__', cartB64], ['__FONT_B64__', font]];

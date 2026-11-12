@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Publishes the built one-file web player to GitHub Pages (the gh-pages branch):
-# web/coffee-and-kill.html is self-contained, so it becomes index.html as is, with
-# the station cart beside it for download.
+# Publishes the web player to GitHub Pages (the gh-pages branch): a small loader page as
+# index.html that fetches the cart beside it with a progress bar (the one-file
+# web/coffee-and-kill.html stays the download for playing offline).
 #
 #   ./build.sh && tools/publish-pages.sh
 set -euo pipefail
@@ -17,8 +17,8 @@ else
   git -C "$WT" checkout -q --orphan gh-pages
   git -C "$WT" rm -rq --cached . && git -C "$WT" clean -fdxq
 fi
-cp "$ROOT/web/coffee-and-kill.html" "$WT/index.html"   # the one-file build plays on its own
-[ -f "$ROOT/build/coffee-and-kill.wasc" ] && cp "$ROOT/build/coffee-and-kill.wasc" "$WT/coffee-and-kill.wasc"
+node "$ROOT/tools/inline-html.mjs" "$ROOT/web/index.src.html" "$ROOT/web/vendor/host-bundle.js" - "$WT/index.html" >/dev/null
+cp "$ROOT/build/coffee-and-kill.wasc" "$WT/coffee-and-kill.wasc"
 touch "$WT/.nojekyll"   # serve the files as they are
 git -C "$WT" add -A
 if git -C "$WT" diff --cached --quiet; then echo "pages already up to date"; exit 0; fi
