@@ -1348,6 +1348,8 @@ static void pad_keys(void) {
  * so the tool can take the alpha from the difference. */
 static int por_n = -1;
 static fighter *por_f;
+#endif
+#if defined(CK_PORTRAITS) || defined(CK_POSTER)
 static void hide_meshes(t3_object *o, t3_object *keep) {
   if (o == keep) return;
   if (o->type == T3_MESH || o->type == T3_SKINNED_MESH || o->type == T3_INSTANCED_MESH || o->type == T3_POINTS ||
@@ -1360,6 +1362,8 @@ static t3_light *find_sun(t3_object *o) {
   for (int i = 0; i < o->child_count; i++) { t3_light *l = find_sun(o->children[i]); if (l) return l; }
   return NULL;
 }
+#endif
+#ifdef CK_PORTRAITS
 static void portrait_frame(void) {
   int n = ++por_n, i = n / 8, k = n % 8;
   if (i >= ROSTER_N) return;
@@ -1414,6 +1418,66 @@ static void stills_frame(void) {
   if (STAGES[st_s].kind != STK_WORKSHOP) stage_camera(g, &w);
   t3_object_set_position(G.cam, w.x, w.y, w.z); t3_object_look_at(G.cam, g.x, g.y, g.z);
   if (++st_wait == 4) { ck_log("[still] %d %s", st_s, STAGES[st_s].key); st_s++; st_step = 0; st_wait = -1; }
+}
+#endif
+
+#ifdef CK_POSTER
+/* test builds (-DCK_POSTER -DCK_NOUI): each fighter alone, full body, mid-swing with its weapon,
+ * over black on frame i*STEP+(STEP-2) and over white on i*STEP+(STEP-1), so tools/bake-poster.mjs
+ * can take the alpha and auto-crop a clean cutout. These compose the station cover posters.
+ * The body setup mirrors portrait_frame (which renders the GLB bodies correctly); only the camera
+ * pulls back to full body and the pose is an attack clip. */
+struct poster_pose { const char *key, *weapon, *clip; float hold, yaw; };
+static const struct poster_pose POSTER[] = {
+  /* The realistic GLB bodies (moheeb, luis) do not render in the current headless rig; their select
+   * portraits (assets/portraits) cover the two leads on the poster. The cel KEYHOLDER bodies below
+   * render in full-body battle poses. */
+  { "vee",    "arc",    "Sword_Light_C",     0.40f,  0.42f },
+  { "dobbs",  "maul",   "Sword_Heavy_A",     0.36f, -0.38f },
+  { "vic",    "staff",  "Sword_Heavy_B",     0.42f,  0.46f },
+  { "cal",    "maul",   "Kick",              0.28f, -0.42f },
+  { "ruth",   "spear",  "Sword_Heavy_A",     0.40f,  0.40f },
+  { "dex",    "staff",  "Sword_Light_C",     0.40f, -0.40f },
+  { "root",   "maul",   "Sword_Heavy_A",     0.36f,  0.44f },
+  { "bex",    "spear",  "Sword_Light_C",     0.40f, -0.42f },
+  { "rennick","twin",   "Kick",              0.30f,  0.40f },
+  { "champ",  "twin",   "Sword_Light_C",     0.40f, -0.40f },
+};
+#define POSTER_N ((int)(sizeof POSTER / sizeof POSTER[0]))
+#define POSTER_STEP 16
+static int pos_n = -1; static fighter *pos_f;
+static void poster_frame(void) {
+  int n = ++pos_n, i = n / POSTER_STEP, k = n % POSTER_STEP;
+  if (i >= POSTER_N) return;
+  t3_scene *sc = stage_scene();
+  if (k == 0) {
+    for (int t = 0; t < 2; t++) if (G.f[t]) body_visible(G.f[t]->body, false);
+    if (pos_f) fighter_free(pos_f);
+    int ri = roster_index(POSTER[i].key); if (ri < 0) ri = 0;
+    pos_f = fighter_new(ri, 0);
+    body_attach(pos_f->body, sc);
+    t3_object_set_position(pos_f->root, 0, 0, 0);
+    pos_f->yaw = POSTER[i].yaw; t3_object_set_rotation(pos_f->root, 0, POSTER[i].yaw, 0);
+    body_teleport(pos_f->body);
+    hide_meshes(&sc->base, pos_f->root);
+    t3_object_traverse(pos_f->root, no_cast, NULL);
+    fighter_set_weapon(pos_f, weapon_index(POSTER[i].weapon));
+    fighter_play(pos_f, POSTER[i].clip, 0, true, 1, 0, true);
+    ck_log("[poster] %d %s", i, POSTER[i].key);
+  }
+  /* advance the pose a little every pre-read frame, reaching the hold time by STEP-2, then freeze */
+  body_animate(pos_f->body, k < POSTER_STEP - 2 ? POSTER[i].hold / (POSTER_STEP - 2) : 0);
+  stage_menu_light(true);   /* the select's flattering even light: the cel bodies keep their colour */
+  /* a 3/4 action camera centred between head and feet, framing the whole body with headroom */
+  t3_object *head = body_bone(pos_f->body, BONE_HEAD);
+  t3_vec3 h = head ? t3_object_get_world_position(head) : t3_v3(0, 1.55f, 0);
+  float a = -0.4f, d = 3.4f;
+  v3 look = {h.x, h.y - 0.74f, h.z};
+  t3_object_set_position(G.cam, look.x + sinf(a) * d, look.y + 0.3f, look.z + cosf(a) * d);
+  t3_object_look_at(G.cam, look.x, look.y, look.z);
+  if (fabsf(G.cam->fov - 38) > 0.01f) { G.cam->fov = 38; t3_camera_update_projection_matrix(G.cam); }
+  sc->has_background = true;
+  sc->background = k == POSTER_STEP - 1 ? t3_color_hex(0xffffff) : t3_color_hex(0x000000);
 }
 #endif
 
@@ -1539,6 +1603,9 @@ void game_frame(float dt) {
 #ifdef CK_PORTRAITS
   (void)dt; portrait_frame(); return;
 #endif
+#ifdef CK_POSTER
+  (void)dt; poster_frame(); return;
+#endif
 #ifdef CK_SHOWROOM
   (void)dt; showroom_frame(); return;
 #endif
@@ -1564,7 +1631,7 @@ void game_frame(float dt) {
 }
 
 void game_draw(void) {
-#if defined(CK_PORTRAITS) || defined(CK_SHOWROOM)
+#if defined(CK_PORTRAITS) || defined(CK_SHOWROOM) || defined(CK_POSTER)
   if (G.arena_ready && G.phase != PH_LOAD) { render_scene(stage_scene(), G.cam); return; }
 #endif
 #ifdef CK_STILLS
