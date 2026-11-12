@@ -29,3 +29,5 @@ Engine: three.js (MIT) by way of three.c, and wasmcart, by Luis Montes (MIT). ca
 Fonts: Archivo, IBM Plex Mono and JetBrains Mono, SIL Open Font License (assets/fonts/OFL.txt).
 
 This game is a story. HeatSync Labs does not settle anything by wrench, or by sword.
+
+Music and effects on the KEYHOLDER stages and for its weapons: KEYHOLDER's own synth (src/kh/kaudio.c, from games/keyholder/src/audio.c), original, MIT.

@@ -2,6 +2,7 @@
  * callbacks, the act switch and the key handler). The online host's event
  * buffer and snapshots, and the guest's replay, are here too (they are wv's). */
 #include "game.h"
+#include "kh/ksound.h"   /* KEYHOLDER's music on its stages */
 #include "ck.h"
 #include "fighter.h"
 #include "arena.h"
@@ -214,7 +215,7 @@ static void use_stage(int s) {
 }
 
 static void menu_mode(void) {
-  G.phase = PH_MENU; gui_hud(false); gui_set_hint(""); music_set_level(0.35f); place_fighters();
+  G.phase = PH_MENU; gui_hud(false); gui_set_hint(""); music_set_level(0.35f); ksound_menu(); place_fighters();
 }
 
 /* ---------------------------------------------------------------- the fighter select */
@@ -350,6 +351,7 @@ static void start_round(void) {
   else if (G.in_tourney && G.round == 1 && (G.cpu[0] != G.cpu[1])) snprintf(sub, sizeof sub, "%s ON ANY PAD", G.label[G.cpu[0] ? 1 : 0]);
   gui_announce(r, sub);
   sfx_bell(); music_set_level(1);
+  ksound_round(STAGES[stage_current() >= 0 ? stage_current() : 0].kind != STK_WORKSHOP, G.round == RT * 2 - 1);
   if (G.round == 1) say_fighter(0, "hi");   /* P1 opens; P2 answers at the FIGHT beat */
 }
 
@@ -388,6 +390,7 @@ static void finish_match(void) {
     gui_set_end(fname(D), true, sub);
     sfx_win(); say_fighter(D, "win");
   }
+  ksound_match_end();
   gui_show("s-end"); G.phase = PH_MATCHEND; gui_clear_announce();
 }
 

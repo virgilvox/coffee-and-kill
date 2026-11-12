@@ -15,6 +15,8 @@
  * .003, release .25, the default makeup gain), ported below. The chain runs at
  * 48 kHz (the page's context rate) and is resampled to the host's rate. */
 #include "audio.h"
+#include "kh/kaudio.h"
+#include "kh/ksound.h"
 #include "ck.h"
 #define DR_FLAC_IMPLEMENTATION
 #define DR_FLAC_NO_STDIO
@@ -239,6 +241,9 @@ static bool inited;
 static void render_block(void) {
   memset(blk_l, 0, sizeof blk_l); memset(blk_r, 0, sizeof blk_r);
   music_render(blk_l, blk_r, BLOCK, t_audio);
+  /* while KEYHOLDER's fight music plays (a KEYHOLDER stage) the page's band steps aside, eased */
+  { static float band = 1; float to = kmusic_playing() ? 0.f : 1.f;
+    for (int i = 0; i < BLOCK; i++) { band += (to - band) * 0.0005f; blk_l[i] *= band; blk_r[i] *= band; } }
   float pd = muted ? 0.f : 0.8f;
   for (int i = 0; i < BLOCK; i++) {
     double t = t_audio + i / RATE;
@@ -254,6 +259,7 @@ static void render_block(void) {
     blk_r[i] = (blk_r[i] * g + s) * pd;
   }
   for (int v = 0; v < MAXV; v++) if (voices[v].p && voices[v].pos >= voices[v].n) voices[v].p = NULL;
+  kaudio_mix(blk_l, blk_r, BLOCK, pd * 0.55f);
   comp_process(blk_l, blk_r, BLOCK);
   t_audio += BLOCK / RATE;
   /* forget automation that is over */
@@ -272,6 +278,7 @@ void audio_init(uint32_t rate) {
   load_sfx();
   comp_init(-14, 30, 5, 0.003f, 0.25f);
   music_init();
+  kaudio_init(48000);   /* KEYHOLDER's synth, mixed into the same block (kh/kaudio.c) */
 }
 
 /* the output ring at the host's rate, as much as the host's time asks */
@@ -306,7 +313,7 @@ double audio_time(void) { return t_audio - (BLOCK - blk_pos) / RATE; }
 double audio_latency(void) { return 0.05; }
 
 /* ---- SA ---- */
-static void tap(const char *n, float a) { if (sfx_tap) sfx_tap(n, a); }
+static void tap(const char *n, float a) { if (sfx_tap) sfx_tap(n, a); ksound_echo(n, a); }   /* KEYHOLDER layers its own (kh/ksound.c) */
 void sfx_duck(float s, float a) {
   double P = audio_time(), v = param_at(P);
   param_cancel(P);

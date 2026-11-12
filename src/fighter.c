@@ -2,6 +2,7 @@
  * the page's fields where they differ. The weapons' builders are in weapons.c, the
  * fighter's model in body.c. */
 #include "fighter.h"
+#include "kh/ksound.h"   /* a KEYHOLDER weapon swings with its own sound */
 #include "geom.h"
 #include "audio.h"
 #include "ck.h"
@@ -285,7 +286,7 @@ void fighter_update(fighter *f, float A, const intent_t *P, v2 e, fighter *t, co
           float a = 1 - B / fmaxf(0.1f, o->hit1);
           if (D->dist_to > 1.15f) { f->vel.x = w.x * f->lunge_v * a; f->vel.z = w.y * f->lunge_v * a; }
         }
-        if (!f->whooshed && B >= f->whoosh_at) { f->whooshed = true; sfx_whoosh(f->W->dmg); }
+        if (!f->whooshed && B >= f->whoosh_at) { f->whooshed = true; ksound_weapon(f->W->web ? -1 : f->W->kh); sfx_whoosh(f->W->dmg); }
         if (f->buf && B >= o->cancel) {
           int a = -1;
           if (f->buf == 'K') a = MV_KICK;
