@@ -62,3 +62,16 @@ basic+map+trans+instbig+ds+icol
 basic+vcol+instbig+ds
 lambert+vcol+fog+instbig+ds+l1001
 lambert+vcol+instbig+fog2+ds+l1b01
+lambert+map+skin+fog2+atest+ds+l2b01
+lambert+map+skin+morph+fog2+atest+ds+l2b01
+lambert+vcol+fog2+ds+l2b01
+standard+map+rep+emap+shadow+skin+senv+fog2+l2b01+s100
+standard+map+rep+senv+fog2+l2b01
+standard+map+rep+shadow+senv+fog2+ds+l2b01+s100
+standard+map+rep+shadow+senv+fog2+l2b01+s100
+standard+map+shadow+senv+fog2+l2b01+s100
+standard+map+trans+rep+shadow+senv+fog2+l2b01+s100
+standard+senv+fog2+ds+l2b01
+standard+senv+fog2+l2b01
+standard+shadow+senv+fog2+l2b01+s100
+standard+trans+shadow+senv+fog2+l2b01+s100
